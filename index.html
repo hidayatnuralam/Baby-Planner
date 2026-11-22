@@ -3,9 +3,99 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    /* Penjaga awal: halaman tidak boleh kosong tanpa penjelasan.
+       Menangkap error & kegagalan pustaka CDN, lalu menampilkan panel diagnostik di layar. */
+    (function () {
+      var failed = (window.__bootFailedLibs = []);
+      var errors = (window.__bootErrors = []);
+      window.__appBooted = false;
+      window.__bootBusy = false;
+      var timer = null;
+
+      function rootHasApp() {
+        var r = document.getElementById('root');
+        if (!r) return false;
+        for (var i = 0; i < r.children.length; i++) {
+          if (r.children[i].id !== 'boot-loading' && r.children[i].id !== 'boot-error') return true;
+        }
+        return false;
+      }
+      function el(tag, css, text) {
+        var e = document.createElement(tag);
+        if (css) e.style.cssText = css;
+        if (text) e.textContent = text;
+        return e;
+      }
+      function has(v) { return typeof v !== 'undefined' && v ? 'OK' : 'TIDAK TERSEDIA'; }
+      function showPanel(reason) {
+        var r = document.getElementById('root');
+        if (!r || rootHasApp() || window.__bootBusy) return;
+        var old = document.getElementById('boot-error');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var loading = document.getElementById('boot-loading');
+        if (loading) loading.style.display = 'none';
+
+        var card = el('div', 'max-width:560px;margin:40px auto;padding:24px;background:#fff;border:1px solid #e7d9c9;border-radius:20px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#3b3346;box-shadow:0 8px 30px rgba(60,40,80,.08)');
+        card.id = 'boot-error';
+        card.appendChild(el('h1', 'font-size:20px;margin:0 0 8px;font-weight:700', 'Baby Planner belum bisa ditampilkan'));
+        card.appendChild(el('p', 'margin:0 0 14px;font-size:14px;line-height:1.5;color:#6b6075', reason));
+        var lines = [];
+        if (errors.length) lines.push('Pesan error:\n  - ' + errors.slice(-3).join('\n  - '));
+        if (failed.length) lines.push('Pustaka gagal dimuat:\n  - ' + failed.join('\n  - '));
+        lines.push('Status:\n  Tailwind CSS: ' + has(window.tailwind && window.tailwind.config !== undefined ? 1 : 0) +
+          '\n  Lucide (ikon): ' + has(window.lucide && window.lucide.createIcons && !window.lucide.__stub ? 1 : 0) +
+          '\n  google.script.run: ' + has(window.google && window.google.script && window.google.script.run ? 1 : 0) +
+          '\n  Skrip utama berjalan: ' + (window.__appBooted ? 'ya' : 'TIDAK'));
+        /* bandingkan skrip utama yang DITERIMA browser dengan ukuran yang seharusnya (deteksi file terpotong) */
+        var mainEl = null, all = document.scripts;
+        for (var k = 0; k < all.length; k++) {
+          if (!all[k].src && (!mainEl || all[k].text.length > mainEl.text.length)) mainEl = all[k];
+        }
+        var recv = mainEl ? mainEl.text.length : 0, exp = 246755;
+        lines.push('Ukuran skrip utama:\n  diterima  : ' + recv + ' karakter\n  seharusnya: ' + exp + ' karakter' +
+          (recv < exp - 5 ? '\n  >>> TERPOTONG (' + Math.round(recv * 100 / exp) + '% diterima). File index.html tidak tertempel utuh.'
+            : (recv > exp + 5 ? '\n  >>> LEBIH BESAR dari seharusnya (file tertimpa/berbeda versi?)' : '\n  ukuran sesuai')));
+        var tail = '';
+        try { tail = (document.documentElement.outerHTML || '').slice(-70).replace(/\s+/g, ' '); } catch (x) {}
+        lines.push('Akhir dokumen yang diterima browser:\n  ...' + tail);
+        card.appendChild(el('pre', 'white-space:pre-wrap;word-break:break-word;margin:0 0 16px;padding:12px;background:#faf6f1;border-radius:12px;font-size:12px;line-height:1.5;color:#4a4055', lines.join('\n\n')));
+        var btn = el('button', 'padding:10px 18px;border:0;border-radius:12px;background:#8e72c4;color:#fff;font-weight:600;font-size:14px;cursor:pointer', 'Muat ulang halaman');
+        btn.onclick = function () { location.reload(); };
+        card.appendChild(btn);
+        card.appendChild(el('p', 'margin:14px 0 0;font-size:12px;color:#8a7f95', 'Jika masalah berlanjut, kirim tangkapan layar panel ini kepada pengembang.'));
+        r.appendChild(card);
+      }
+      function check(reason, delay) {
+        clearTimeout(timer);
+        timer = setTimeout(function () { showPanel(reason); }, delay);
+      }
+
+      /* fase capture: juga menangkap <script src> yang gagal dimuat (tidak ada bubbling untuk resource error) */
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && t !== window && t.tagName && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) {
+          failed.push(t.src || t.href);
+          return;
+        }
+        errors.push((e.message || 'Error') + (e.filename ? '  [' + String(e.filename).split('/').pop().slice(0, 40) + ':' + e.lineno + ']' : ''));
+        check('Terjadi kesalahan saat memulai aplikasi.', 800);
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        errors.push('Promise: ' + ((e.reason && e.reason.message) || e.reason));
+        check('Terjadi kesalahan saat memulai aplikasi.', 800);
+      });
+      /* skrip utama tidak pernah sampai ke tahap boot (mis. terpotong saat ditempel) */
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          if (!window.__appBooted) showPanel('Skrip utama aplikasi tidak berjalan. File index.html kemungkinan belum tertempel utuh.');
+        }, 4000);
+      });
+    })();
+  </script>
   <title>Baby Planner — Ruang Tenang Perencanaan Kehamilan, Newborn &amp; MPASI</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/lucide@0.525.0/dist/umd/lucide.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -258,6 +348,25 @@
   </style>
 
   <script>
+    /* Pustaka CDN opsional: bila gagal dimuat, aplikasi tetap tampil (tanpa ikon / gaya) alih-alih kosong. */
+    (function () {
+      if (typeof window.tailwind === 'undefined') window.tailwind = {};
+      function lucideOk() { return typeof window.lucide !== 'undefined' && window.lucide && typeof window.lucide.createIcons === 'function'; }
+      if (lucideOk()) return;
+      var stub = { createIcons: function () {}, __stub: true };
+      window.lucide = stub;
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/lucide@0.525.0/dist/umd/lucide.min.js';
+      s.onload = function () {
+        if (lucideOk() && !window.lucide.__stub) { try { window.lucide.createIcons(); } catch (e) {} }
+        else window.lucide = stub;
+      };
+      s.onerror = function () { (window.__bootFailedLibs = window.__bootFailedLibs || []).push(s.src); window.lucide = stub; };
+      document.head.appendChild(s);
+    })();
+  </script>
+
+  <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
@@ -329,17 +438,17 @@
   <!-- TOP CALM DEMO BANNER (z-index: 2000) -->
   <div id="demo-banner" style="background-color: var(--banner-bg); color: var(--banner-text);" class="fixed top-0 inset-x-0 z-[2000] text-xs py-2.5 px-4 sm:px-6 flex flex-wrap items-center justify-between gap-2 border-b border-hairline">
     <div class="flex items-center gap-2.5">
-      <span class="inline-block w-2.5 h-2.5 rounded-full bg-brand"></span>
-      <span class="font-mono uppercase tracking-wider text-[11px] font-semibold text-brand-text">RUANG SIMULASI INTERAKTIF</span>
-      <span class="hidden md:inline text-inkSoft">— Seluruh jadwal, checklist, dan panduan dapat disesuaikan dengan ritme Bunda &amp; Ayah.</span>
+      <span id="conn-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-brand"></span>
+      <span class="font-mono uppercase tracking-wider text-[11px] font-semibold text-brand-text" id="conn-label">RUANG KELUARGA ONLINE</span>
+      <span class="hidden md:inline text-inkSoft">— Catatan keluarga tersimpan aman di Google Sheets &amp; Drive Anda.</span>
     </div>
     <div class="flex items-center gap-3">
       <button onclick="toggleThemeMode()" id="banner-theme-btn" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface border border-hairline text-[11px] font-semibold text-ink hover:bg-subtle transition">
         <i data-lucide="moon" class="w-3.5 h-3.5 text-brand"></i>
         <span>Mode Malam</span>
       </button>
-      <button onclick="resetDemoData()" class="text-[11px] font-semibold underline underline-offset-2 text-inkSoft hover:text-ink">
-        Atur Ulang Data
+      <button onclick="syncNow()" class="text-[11px] font-semibold underline underline-offset-2 text-inkSoft hover:text-ink">
+        Muat Ulang Data
       </button>
     </div>
   </div>
@@ -364,7 +473,7 @@
   </div>
 
   <!-- ROOT CONTAINER (AUTH GUARD: Renders ONLY Auth or ONLY App) -->
-  <div id="root" class="pt-11 min-h-screen flex flex-col"></div>
+  <div id="root" class="pt-11 min-h-screen flex flex-col"><div id="boot-loading" style="padding:64px 16px;text-align:center;font-family:system-ui,sans-serif;color:#7a6f87;font-size:14px">Memuat Baby Planner…</div></div>
 
   <script>
     // =========================================================================
@@ -425,8 +534,6 @@
     // =========================================================================
     // 1. DATE & INITIAL DUMMY DATABASE (EMPATHETIC & SUPPORTIVE CONTENT)
     // =========================================================================
-    const STORAGE_KEY = 'baby_planner_demo_v5';
-
     function toISODate(dateObj) {
       const y = dateObj.getFullYear();
       const m = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -451,248 +558,7 @@
 
     const DEFAULT_HPL = getFutureDateISO(98);
 
-    const DEFAULT_STATE = {
-      users: [
-        {
-          user_id: 'USR-001',
-          family_id: 'FAM-2026',
-          nama_lengkap: 'Bunda Nadia',
-          email: 'bunda@babyplanner.id',
-          password: 'bunda123',
-          role: 'User',
-          family_role: 'Bunda',
-          status_akun: 'Aktif',
-          avatar_url: '',
-          avatar_color: 'lavender',
-          no_hp: '0812-8890-1122',
-          tanggal_lahir: '1995-04-18',
-          golongan_darah: 'O+',
-          alergi: 'Tidak ada alergi obat maupun makanan',
-          faskes_utama: 'RSIA Bunda Menteng — Poli Kebidanan & Anak',
-          dokter_pj: 'dr. Rahma Wijaya, Sp.OG',
-          bio_catatan: 'Menikmati perjalanan kehamilan dengan tenang, menjaga nutrisi harian, dan menyiapkan tas persalinan bersama Ayah.',
-          joined_at: getPastDateISO(150)
-        },
-        {
-          user_id: 'USR-002',
-          family_id: 'FAM-2026',
-          nama_lengkap: 'Ayah Dimas',
-          email: 'ayah@babyplanner.id',
-          password: 'ayah123',
-          role: 'User',
-          family_role: 'Ayah',
-          status_akun: 'Aktif',
-          avatar_url: '',
-          avatar_color: 'peach',
-          no_hp: '0811-7740-9901',
-          tanggal_lahir: '1993-09-25',
-          golongan_darah: 'A+',
-          alergi: 'Alergi ringan debu dingin',
-          faskes_utama: 'RSIA Bunda Menteng — IGD & Rawat Inap',
-          dokter_pj: 'dr. Rahma Wijaya, Sp.OG',
-          bio_catatan: 'Siap mendampingi Bunda, menyiapkan perlengkapan si kecil, menyimpan arsip USG, dan memastikan rute nyaman ke rumah sakit.',
-          joined_at: getPastDateISO(149)
-        },
-        {
-          user_id: 'USR-ADM',
-          family_id: 'FAM-ADMIN',
-          nama_lengkap: 'Admin Pendamping',
-          email: 'admin@babyplanner.id',
-          password: 'admin123',
-          role: 'Admin',
-          family_role: 'Admin',
-          status_akun: 'Aktif',
-          avatar_url: '',
-          avatar_color: 'sky',
-          no_hp: '0800-1-500-220',
-          tanggal_lahir: '1990-01-10',
-          golongan_darah: 'B+',
-          alergi: 'Tidak ada',
-          faskes_utama: 'Kurator Edukasi Keluarga & Dukungan Sistem',
-          dokter_pj: 'Tim Editorial IDAI / Kemenkes Referensi',
-          bio_catatan: 'Menyusun panduan perawatan bayi yang hangat, mudah dipahami, dan bersumber dari referensi tepercaya.',
-          joined_at: getPastDateISO(200)
-        }
-      ],
-      families: [
-        {
-          family_id: 'FAM-2026',
-          invite_code: 'KEL-2026',
-          nama_keluarga: 'Keluarga Dimas & Nadia',
-          hpl_date: DEFAULT_HPL,
-          baby_birth_date: '',
-          baby_name: 'Calon Buah Hati'
-        },
-        {
-          family_id: 'FAM-ADMIN',
-          invite_code: 'ADM-000',
-          nama_keluarga: 'Workspace Kurator Panduan',
-          hpl_date: getFutureDateISO(120),
-          baby_birth_date: '',
-          baby_name: 'Si Kecil'
-        }
-      ],
-      checklists: [
-        // --- A. PREGNANCY TO-DO LIST / TIMELINE ---
-        { item_id: 'CHK-101', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 1 (Minggu 1–13)', sub_periode: 'Bulan 1 • Minggu 5', due_date: getPastDateISO(147), due_time: '07:30', week_number: 5, judul_item: 'Konfirmasi kehamilan & mulai rutin minum Asam Folat 400 mcg', deskripsi: 'Diminum setiap pagi dengan segelas air hangat untuk mendukung pertumbuhan awal si kecil.', is_completed: true, qty: 1, estimasi_harga: 0, catatan: 'Sudah diresepkan bidan/dokter', updated_by: 'Bunda' },
-        { item_id: 'CHK-102', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 1 (Minggu 1–13)', sub_periode: 'Bulan 2 • Minggu 8', due_date: getPastDateISO(126), due_time: '10:00', week_number: 8, judul_item: 'Sapaan pertama lewat USG & dengarkan detak jantung si kecil', deskripsi: 'Melihat kantung kehamilan dan memastikan usia kehamilan Bunda agar perkiraan lahir lebih akurat.', is_completed: true, qty: 1, estimasi_harga: 0, catatan: 'Detak jantung terdeteksi sehat & teratur', updated_by: 'Ayah' },
-        { item_id: 'CHK-103', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 1 (Minggu 1–13)', sub_periode: 'Bulan 3 • Minggu 12', due_date: getPastDateISO(98), due_time: '08:30', week_number: 12, judul_item: 'Pemeriksaan kesehatan awal & cek darah lengkap Trimester 1', deskripsi: 'Memastikan kadar hemoglobin (Hb) Bunda optimal dan kondisi tubuh prima.', is_completed: true, qty: 1, estimasi_harga: 0, catatan: 'Hasil tersimpan rapi di Buku KIA', updated_by: 'Bunda' },
-        { item_id: 'CHK-104', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 2 (Minggu 14–27)', sub_periode: 'Bulan 4 • Minggu 17', due_date: getPastDateISO(63), due_time: '20:00', week_number: 17, judul_item: 'Perawatan kelembapan kulit perut & atur jadwal vitamin zat besi', deskripsi: 'Oleskan pelembap lembut setelah mandi sore dan beri jeda minum antara kalsium dan zat besi.', is_completed: true, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-105', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 2 (Minggu 14–27)', sub_periode: 'Bulan 5 • Minggu 21', due_date: getPastDateISO(35), due_time: '14:00', week_number: 21, judul_item: 'USG detail untuk melihat perkembangan organ tubuh si kecil', deskripsi: 'Momen menyenangkan melihat jari-jari kecil, posisi ari-ari, dan kecukupan air ketuban.', is_completed: true, qty: 1, estimasi_harga: 0, catatan: 'Alhamdulillah semua berkembang sehat', updated_by: 'Ayah' },
-        { item_id: 'CHK-106', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 2 (Minggu 14–27)', sub_periode: 'Bulan 6 • Minggu 26', due_date: getOffsetDateISO(0), due_time: '08:00', week_number: 26, judul_item: 'Cek gula darah kehamilan (TTGO) pagi hari', deskripsi: 'Jangan lupa bawa camilan sehat untuk dimakan setelah pengambilan sampel darah selesai ya, Bunda.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: 'Ayah menemani ke laboratorium pagi ini', updated_by: 'Bunda' },
-        { item_id: 'CHK-111', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 2 (Minggu 14–27)', sub_periode: 'Bulan 6 • Minggu 26', due_date: getOffsetDateISO(0), due_time: '16:30', week_number: 26, judul_item: 'Peregangan ringan & latihan napas tenang sore hari', deskripsi: 'Luangkan 30–45 menit untuk merilekskan punggung bawah dan melatih napas lembut.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: 'Siapkan matras nyaman & air minum', updated_by: 'Bunda' },
-        { item_id: 'CHK-107', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 2 (Minggu 14–27)', sub_periode: 'Bulan 6 • Minggu 27', due_date: getFutureDateISO(5), due_time: '10:30', week_number: 27, judul_item: 'Kontrol rutin bersama dokter kandungan menjelang Trimester 3', deskripsi: 'Memantau pertumbuhan berat janin dan memastikan tekanan darah Bunda tetap nyaman.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: 'Bawa Buku KIA & hasil lab', updated_by: 'Ayah' },
-        { item_id: 'CHK-108', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 3 (Minggu 28–40)', sub_periode: 'Bulan 7 • Minggu 29', due_date: getFutureDateISO(18), due_time: '19:30', week_number: 29, judul_item: 'Sapa tendangan si kecil tiap hari & ikut kelas menyusui berdua', deskripsi: 'Luangkan waktu santai memperhatikan gerakan bayi, dan ajak Ayah belajar cara mendukung proses menyusui.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Ayah' },
-        { item_id: 'CHK-109', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 3 (Minggu 28–40)', sub_periode: 'Bulan 8 • Minggu 34', due_date: getFutureDateISO(54), due_time: '09:00', week_number: 34, judul_item: 'Cuci lembut pakaian bayi & tata isi Tas Persalinan (Hospital Bag)', deskripsi: 'Pisahkan tas Bunda, tas Si Kecil, dan map dokumen agar mudah diambil saat hari-H tiba.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-110', family_id: 'FAM-2026', modul: 'pregnancy_todo', kategori: 'Trimester 3 (Minggu 28–40)', sub_periode: 'Bulan 9 • Minggu 37', due_date: getFutureDateISO(77), due_time: '11:00', week_number: 37, judul_item: 'Kontrol mingguan & diskusi rencana persalinan yang nyaman', deskripsi: 'Pastikan rute ke rumah sakit sudah siap dan kenali sinyal tubuh menjelang pertemuan pertama dengan si kecil.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Ayah' },
-
-        // --- B. LIST PERLENGKAPAN & HOSPITAL BAG ---
-        { item_id: 'CHK-201', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Alat Mandi, Cuci Baju & Peralatan', sub_periode: 'Perlengkapan Utama', judul_item: 'Bak mandi bayi ergonomis + jaring penyangga lembut', deskripsi: 'Pilih yang permukaannya tidak licin agar sesi mandi pertama terasa aman dan menyenangkan.', is_completed: true, qty: 1, estimasi_harga: 245000, catatan: 'Warna krem netral', updated_by: 'Ayah' },
-        { item_id: 'CHK-202', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Alat Mandi, Cuci Baju & Peralatan', sub_periode: 'Perlengkapan Utama', judul_item: 'Sabun & sampo bayi lembut bebas pewangi tajam', deskripsi: 'Formula ramah kulit sensitif bayi baru lahir dan tidak perih di mata.', is_completed: true, qty: 2, estimasi_harga: 130000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-203', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Alat Mandi, Cuci Baju & Peralatan', sub_periode: 'Perlengkapan Utama', judul_item: 'Handuk katun bambu halus & waslap lembut', deskripsi: 'Menyerap air dengan cepat agar si kecil tetap hangat setelah mandi.', is_completed: false, qty: 3, estimasi_harga: 185000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-204', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Alat Mandi, Cuci Baju & Peralatan', sub_periode: 'Cuci Baju Bayi', judul_item: 'Sabun cuci pakaian khusus bayi & pembersih perlengkapan minum', deskripsi: 'Mudah dibilas dan lembut untuk kulit halus si kecil.', is_completed: true, qty: 2, estimasi_harga: 115000, catatan: '', updated_by: 'Ayah' },
-        { item_id: 'CHK-205', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Alat Mandi, Cuci Baju & Peralatan', sub_periode: 'Peralatan Tidur', judul_item: 'Kasur bayi datar yang kokoh + sprei katun pas ukuran', deskripsi: 'Permukaan tidur datar tanpa bantal tebal membantu si kecil tidur nyenyak dan aman.', is_completed: false, qty: 1, estimasi_harga: 850000, catatan: 'Ukuran boks 120x60 cm', updated_by: 'Ayah' },
-        { item_id: 'CHK-206', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'P3K & Kesehatan', sub_periode: 'Kotak Kesehatan Bayi', judul_item: 'Termometer digital & penyedot lendir hidung lembut', deskripsi: 'Membantu Bunda memantau suhu tubuh si kecil dengan cepat tanpa membuatnya rewel.', is_completed: true, qty: 1, estimasi_harga: 175000, catatan: '', updated_by: 'Ayah' },
-        { item_id: 'CHK-207', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'P3K & Kesehatan', sub_periode: 'Kotak Kesehatan Bayi', judul_item: 'Kasa steril, cairan pembersih NaCl, gunting kuku bayi & krim ruam', deskripsi: 'Untuk merawat area tali pusat dan menjaga lipatan kulit bayi tetap nyaman.', is_completed: false, qty: 1, estimasi_harga: 140000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-208', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'ASI Support', sub_periode: 'Dukungan Menyusui', judul_item: 'Pompa ASI elektrik & kantong penyimpanan ASI', deskripsi: 'Pilih ukuran corong yang pas agar Bunda merasa nyaman saat memerah.', is_completed: false, qty: 1, estimasi_harga: 1150000, catatan: 'Dapat disesuaikan setelah konsultasi laktasi', updated_by: 'Bunda' },
-        { item_id: 'CHK-209', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'ASI Support', sub_periode: 'Dukungan Menyusui', judul_item: 'Bantal menyusui ergonomis, krim puting lanolin & penyerap ASI', deskripsi: 'Menopang lengan dan punggung Bunda agar sesi menggendong & menyusui terasa rileks.', is_completed: true, qty: 1, estimasi_harga: 260000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-210', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Keperluan Ibu', sub_periode: 'Kenyamanan Bunda', judul_item: 'Bra menyusui bukaan depan & baju rumah kancing depan yang adem', deskripsi: 'Memudahkan kontak kulit ke kulit (skin-to-skin) dan menyusui kapan saja.', is_completed: true, qty: 4, estimasi_harga: 360000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-211', family_id: 'FAM-2026', modul: 'gear_list', kategori: 'Keperluan Ibu', sub_periode: 'Kenyamanan Bunda', judul_item: 'Pembalut nifas lembut, penyangga perut nyaman & botol bilas', deskripsi: 'Membantu masa pemulihan Bunda pasca melahirkan terasa jauh lebih nyaman.', is_completed: false, qty: 2, estimasi_harga: 195000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-212', family_id: 'FAM-2026', modul: 'hospital_bag', kategori: 'Hospital Bag', sub_periode: 'Tas Bunda & Dokumen', judul_item: 'Map Dokumen: KTP Bunda-Ayah, KK, Buku KIA, Kartu Asuransi/BPJS', deskripsi: 'Simpan di bagian paling mudah dijangkau agar proses administrasi rumah sakit berjalan lancar.', is_completed: true, qty: 1, estimasi_harga: 0, catatan: 'Sudah difotokopi 3 rangkap', updated_by: 'Ayah' },
-        { item_id: 'CHK-213', family_id: 'FAM-2026', modul: 'hospital_bag', kategori: 'Hospital Bag', sub_periode: 'Tas Bunda & Dokumen', judul_item: '3 stel baju kancing depan, kain lembut, kaus kaki hangat & alat mandi Bunda', deskripsi: 'Sertakan juga camilan favorit Bunda dan botol minum dengan sedotan agar mudah minum sambil berbaring.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-214', family_id: 'FAM-2026', modul: 'hospital_bag', kategori: 'Hospital Bag', sub_periode: 'Tas Si Kecil', judul_item: '4 stel baju bayi lembut, popok newborn, kain bedong, topi & kaus kaki', deskripsi: 'Pisahkan 1 kantong khusus baju pertama untuk dibawa masuk ke ruang bersalin.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: 'Beri label "Baju Pertama Si Kecil"', updated_by: 'Bunda' },
-
-        // --- C. KEBUTUHAN NEWBORN (0-3 BULAN) & MENJELANG MPASI ---
-        { item_id: 'CHK-301', family_id: 'FAM-2026', modul: 'newborn_0_3m', kategori: 'Kebutuhan Newborn (0–3 Bulan)', sub_periode: 'Usia 0–1 Bulan', judul_item: 'Persediaan popok newborn & kapas bulat air hangat', deskripsi: 'Popok yang sering basah (minimal 6x sehari) adalah tanda manis bahwa si kecil cukup minum ASI.', is_completed: true, qty: 2, estimasi_harga: 190000, catatan: 'Ukuran NB (< 5 kg)', updated_by: 'Ayah' },
-        { item_id: 'CHK-302', family_id: 'FAM-2026', modul: 'newborn_0_3m', kategori: 'Kebutuhan Newborn (0–3 Bulan)', sub_periode: 'Usia 0–1 Bulan', judul_item: 'Imunisasi awal kelahiran (Hepatitis B-0, Polio tetes & BCG)', deskripsi: 'Langkah perlindungan dini untuk daya tahan tubuh si kecil; catat tanggalnya di Buku KIA.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-303', family_id: 'FAM-2026', modul: 'newborn_0_3m', kategori: 'Kebutuhan Newborn (0–3 Bulan)', sub_periode: 'Usia 1–2 Bulan', judul_item: 'Kartu gambar kontras hitam-putih & alas empuk untuk Tummy Time', deskripsi: 'Latih tengkurap singkat 3–5 menit saat bayi ceria untuk menguatkan otot leher dan bahunya.', is_completed: false, qty: 1, estimasi_harga: 125000, catatan: '', updated_by: 'Ayah' },
-        { item_id: 'CHK-304', family_id: 'FAM-2026', modul: 'newborn_0_3m', kategori: 'Kebutuhan Newborn (0–3 Bulan)', sub_periode: 'Usia 2–3 Bulan', judul_item: 'Kunjungan tumbuh kembang bulan ke-2 & jadwal imunisasi lanjutan', deskripsi: 'Melihat kenaikan berat dan panjang badan si kecil bersama dokter anak.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-401', family_id: 'FAM-2026', modul: 'mpasi_prep', kategori: 'Persiapan MPASI (Usia 4–6 Bulan)', sub_periode: '1 Bulan Sebelum MPASI', judul_item: 'Kenali menu seimbang MPASI & tahapan tekstur lembut', deskripsi: 'Memahami kombinasi karbohidrat, protein hewani, nabati, dan lemak sehat sejak suapan pertama usia 6 bulan.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-402', family_id: 'FAM-2026', modul: 'mpasi_prep', kategori: 'Persiapan MPASI (Usia 4–6 Bulan)', sub_periode: '3 Minggu Sebelum MPASI', judul_item: 'Siapkan kursi makan bayi (High Chair) dengan sandaran tegak & pijakan kaki', deskripsi: 'Membantu si kecil duduk tegak nyaman dan membangun kebiasaan makan yang menyenangkan.', is_completed: false, qty: 1, estimasi_harga: 650000, catatan: 'Pilih yang mudah dilap bersih', updated_by: 'Ayah' },
-        { item_id: 'CHK-403', family_id: 'FAM-2026', modul: 'mpasi_prep', kategori: 'Persiapan MPASI (Usia 4–6 Bulan)', sub_periode: '2 Minggu Sebelum MPASI', judul_item: 'Peralatan makan & masak MPASI: saringan halus, mangkuk anti-geser, sendok silikon', deskripsi: 'Gunakan sendok berujung lembut agar gusi si kecil tetap nyaman saat belajar makan.', is_completed: false, qty: 1, estimasi_harga: 280000, catatan: '', updated_by: 'Bunda' },
-        { item_id: 'CHK-404', family_id: 'FAM-2026', modul: 'mpasi_prep', kategori: 'Persiapan MPASI (Usia 4–6 Bulan)', sub_periode: '1 Minggu Sebelum MPASI', judul_item: 'Amati tanda kesiapan makan si kecil & ngobrol santai dengan dokter anak', deskripsi: 'Kepala sudah tegak stabil, duduk dengan sedikit bantuan, dan mulai antusias melihat makanan.', is_completed: false, qty: 1, estimasi_harga: 0, catatan: '', updated_by: 'Bunda' }
-      ],
-      schedules: [
-        // Usia 0-1 Bulan
-        { schedule_id: 'SCH-01', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '06:00', waktu_selesai: '07:00', aktivitas: 'Sapa pagi lembut, ganti popok & menyusui sesuai keinginan bayi', kategori_aktivitas: 'Menyusui', catatan: 'Gendong tegak 10–15 menit setelah menyusu agar nyaman bersendawa' },
-        { schedule_id: 'SCH-02', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '07:00', waktu_selesai: '07:30', aktivitas: 'Berjemur cahaya pagi lembut (sebelum pukul 08.00) & ajak bicara', kategori_aktivitas: 'Jemur & Stimulasi', catatan: 'Cukup 10–15 menit saja sambil membelai lembut punggung si kecil' },
-        { schedule_id: 'SCH-03', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '07:30', waktu_selesai: '08:30', aktivitas: 'Mandi air hangat suam-suam kuku & perawatan lembut tali pusat', kategori_aktivitas: 'Mandi & Perawatan', catatan: 'Biarkan tali pusat tetap bersih, kering, dan terbuka udara' },
-        { schedule_id: 'SCH-04', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '08:30', waktu_selesai: '11:00', aktivitas: 'Menyusui & Tidur Pagi yang Nyenyak', kategori_aktivitas: 'Tidur', catatan: 'Tidurkan telentang di kasur datar agar napas si kecil selalu lega' },
-        { schedule_id: 'SCH-05', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '11:00', waktu_selesai: '14:00', aktivitas: 'Menyusui, ganti popok, tengkurap singkat (2–3 mnt) & Tidur Siang', kategori_aktivitas: 'Tidur', catatan: 'Bila siang hari bayi tidur lebih dari 3 jam, bangunkan perlahan untuk menyusu' },
-        { schedule_id: 'SCH-06', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '14:00', waktu_selesai: '17:00', aktivitas: 'Menyusui, tatap mata penuh kasih & Tidur Sore', kategori_aktivitas: 'Menyusui', catatan: 'Wajah Bunda dan Ayah adalah mainan favorit si kecil di bulan pertama' },
-        { schedule_id: 'SCH-07', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '17:00', waktu_selesai: '19:00', aktivitas: 'Seka lembut air hangat, ganti baju tidur nyaman & menyusui', kategori_aktivitas: 'Mandi & Perawatan', catatan: 'Mulai redupkan lampu kamar sebagai tanda waktu istirahat malam tiba' },
-        { schedule_id: 'SCH-08', family_id: 'FAM-2026', rentang_usia: '0–1 Bulan', waktu_mulai: '19:00', waktu_selesai: '06:00', aktivitas: 'Tidur Malam + Menyusui Malam (bangun tiap 2–3 jam saat lapar)', kategori_aktivitas: 'Tidur', catatan: 'Gunakan cahaya redup saat menyusui malam agar Bunda & bayi mudah tidur kembali' },
-
-        // Usia 1-2 Bulan
-        { schedule_id: 'SCH-09', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '06:30', waktu_selesai: '07:30', aktivitas: 'Bangun pagi, menyusui hangat & ganti popok segar', kategori_aktivitas: 'Menyusui', catatan: 'Pola bangun pagi mulai terasa lebih teratur' },
-        { schedule_id: 'SCH-10', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '07:30', waktu_selesai: '08:30', aktivitas: 'Jemur pagi, Tummy Time ceria (5–10 menit) & mandi hangat', kategori_aktivitas: 'Jemur & Stimulasi', catatan: 'Tunjukkan kartu kontras hitam-putih saat bayi tengkurap' },
-        { schedule_id: 'SCH-11', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '08:30', waktu_selesai: '10:30', aktivitas: 'Menyusui & Tidur Pagi', kategori_aktivitas: 'Tidur', catatan: 'Amati sinyal mengantuk seperti menguap atau pandangan mulai sayu' },
-        { schedule_id: 'SCH-12', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '10:30', waktu_selesai: '14:30', aktivitas: 'Ritme Menyusu – Bermain Lembut – Tidur Siang', kategori_aktivitas: 'Tidur', catatan: 'Waktu terjaga bayi usia ini rata-rata 60–75 menit sebelum mengantuk lagi' },
-        { schedule_id: 'SCH-13', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '14:30', waktu_selesai: '17:30', aktivitas: 'Menyusui, jalan santai di teras rumah & Tidur Sore', kategori_aktivitas: 'Jemur & Stimulasi', catatan: 'Udara sore membantu si kecil mengenal perbedaan siang dan malam' },
-        { schedule_id: 'SCH-14', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '18:00', waktu_selesai: '19:30', aktivitas: 'Ritual Pengantar Tidur: Lap hangat, pijat lembut, piyama & menyusui', kategori_aktivitas: 'Mandi & Perawatan', catatan: 'Sentuhan lembut Bunda atau Ayah membuat si kecil merasa sangat aman' },
-        { schedule_id: 'SCH-15', family_id: 'FAM-2026', rentang_usia: '1–2 Bulan', waktu_mulai: '19:30', waktu_selesai: '06:30', aktivitas: 'Tidur Malam Nyenyak (1–2x bangun untuk menyusu)', kategori_aktivitas: 'Tidur', catatan: 'Jaga suhu kamar tetap sejuk nyaman di kisaran 24–26°C' },
-
-        // Usia 2-3 Bulan
-        { schedule_id: 'SCH-16', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '06:30', waktu_selesai: '08:00', aktivitas: 'Sapa pagi, menyusui, Tummy Time 15 menit & mandi pagi', kategori_aktivitas: 'Jemur & Stimulasi', catatan: 'Si kecil mulai sering membalas senyuman dan bersuara lucu (cooing)' },
-        { schedule_id: 'SCH-17', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '08:30', waktu_selesai: '10:15', aktivitas: 'Tidur Pagi', kategori_aktivitas: 'Tidur', catatan: 'Waktu terjaga usia 2–3 bulan berkisar 75–90 menit' },
-        { schedule_id: 'SCH-18', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '10:15', waktu_selesai: '12:00', aktivitas: 'Menyusui & bermain kerincingan lembut / bernyanyi bersama', kategori_aktivitas: 'Menyusui', catatan: 'Gerakkan mainan perlahan ke kiri-kanan untuk melatih fokus matanya' },
-        { schedule_id: 'SCH-19', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '12:00', waktu_selesai: '14:30', aktivitas: 'Tidur Siang Utama', kategori_aktivitas: 'Tidur', catatan: 'Ciptakan suasana kamar yang tenang dan nyaman' },
-        { schedule_id: 'SCH-20', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '14:30', waktu_selesai: '17:30', aktivitas: 'Menyusui, stimulasi sentuhan & Tidur Sore singkat (45 menit)', kategori_aktivitas: 'Tidur', catatan: 'Tidur sore singkat menjaga agar tidur malam tetap tepat waktu' },
-        { schedule_id: 'SCH-21', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '18:30', waktu_selesai: '20:00', aktivitas: 'Ritual Malam: Ganti baju tidur, cerita singkat & menyusui terakhir', kategori_aktivitas: 'Mandi & Perawatan', catatan: 'Suara tenang Bunda dan Ayah menjadi pengantar tidur terbaik' },
-        { schedule_id: 'SCH-22', family_id: 'FAM-2026', rentang_usia: '2–3 Bulan', waktu_mulai: '20:00', waktu_selesai: '06:30', aktivitas: 'Tidur Malam Panjang (umumnya 1x bangun menyusu dini hari)', kategori_aktivitas: 'Tidur', catatan: 'Tetap ikuti sinyal lapar si kecil dengan santai' }
-      ],
-      dosDonts: [
-        {
-          id: 'DD-01',
-          kategori: 'Tidur Nyaman & Aman',
-          topik: 'Posisi & Lingkungan Tidur Si Kecil',
-          is_emergency: false,
-          do_text: 'Tidurkan bayi dalam posisi TELENTANG di atas kasur datar yang kokoh dan pas dengan ukuran tempat tidurnya.',
-          dont_text: 'Sebaiknya hindari menidurkan bayi tengkurap tanpa pengawasan serta singkirkan bantal empuk, selimut tebal, atau boneka di sekitar wajahnya.',
-          alasan: 'Membantu menjaga jalan napas si kecil tetap lapang dan nyaman sepanjang malam.',
-          source_title: 'IDAI — Panduan Tidur Aman pada Bayi',
-          source_url: 'https://www.idai.or.id/artikel/klinik/pengasuhan-anak/tidur-aman-pada-bayi',
-          created_by: 'Admin Pendamping'
-        },
-        {
-          id: 'DD-02',
-          kategori: 'Menyusui & Sendawa',
-          topik: 'Ritme Menyusui di 6 Bulan Pertama',
-          is_emergency: false,
-          do_text: 'Susui si kecil kapan pun ia menunjukkan tanda lapar (8–12 kali sehari) dan gendong tegak sebentar setelahnya untuk bersendawa.',
-          dont_text: 'Hindari memberikan air putih, madu, teh, atau makanan padat sebelum si kecil berusia 6 bulan kecuali atas saran dokter.',
-          alasan: 'ASI sudah mencukupi seluruh kebutuhan cairan dan nutrisi bayi baru lahir, sementara pencernaannya masih beradaptasi perlahan.',
-          source_title: 'WHO — Infant and Young Child Feeding',
-          source_url: 'https://www.who.int/news-room/fact-sheets/detail/infant-and-young-child-feeding',
-          created_by: 'Admin Pendamping'
-        },
-        {
-          id: 'DD-03',
-          kategori: 'Mandi & Perawatan Tali Pusat',
-          topik: 'Merawat Sisa Tali Pusat dengan Lembut',
-          is_emergency: false,
-          do_text: 'Jaga sisa tali pusat tetap bersih, kering, dan terkena udara; lipat bagian depan popok sedikit ke bawah agar tidak bergesekan.',
-          dont_text: 'Hindari mengoleskan ramuan, bedak, minyak, atau alkohol pada tali pusat, dan biarkan tali pusat puput dengan sendirinya.',
-          alasan: 'Perawatan kering dan bersih membantu tali pusat mengering alami tanpa iritasi.',
-          source_title: 'Kemenkes RI — Buku KIA Kesehatan Ibu dan Anak',
-          source_url: 'https://ayosehat.kemkes.go.id/buku-kia',
-          created_by: 'Admin Pendamping'
-        },
-        {
-          id: 'DD-04',
-          kategori: 'Menggendong & Menenangkan',
-          topik: 'Menopang Kepala & Menenangkan Tangisan',
-          is_emergency: false,
-          do_text: 'Selalu sangga bagian kepala dan leher si kecil dengan lembut saat mengangkatnya, dan tenangkan dengan pelukan hangat atau ayunan perlahan.',
-          dont_text: 'Hindari mengguncang tubuh bayi dengan keras saat ia menangis terus-menerus; jika Bunda lelah, letakkan bayi sejenak di tempat aman dan tarik napas.',
-          alasan: 'Otot leher bayi baru lahir masih belajar kuat, dan ketenangan Bunda adalah sumber rasa aman utama baginya.',
-          source_title: 'AAP HealthyChildren — Soothing Your Baby Safely',
-          source_url: 'https://www.healthychildren.org/English/safety-prevention/at-home/Pages/Abusive-Head-Trauma-Shaken-Baby-Syndrome.aspx',
-          created_by: 'Admin Pendamping'
-        },
-        {
-          id: 'DD-05',
-          kategori: 'Peringatan Medis Darurat',
-          topik: 'Kapan Perlu Segera Menghubungi Dokter / Faskes',
-          is_emergency: true,
-          do_text: 'Biasakan mencuci tangan sebelum menyentuh bayi, dan segera bawa ke fasilitas kesehatan jika suhu tubuh ≥ 38°C, napas tampak cepat/sesak, bayi sulit dibangunkan untuk menyusu, atau kuning meluas hingga telapak kaki.',
-          dont_text: 'Jangan menunda pemeriksaan medis jika muncul tanda bahaya di atas, serta hindari paparan asap rokok dan ciuman di area wajah/tangan bayi.',
-          alasan: 'Daya tahan tubuh bayi 0–3 bulan masih berkembang sehingga penanganan dini oleh tenaga kesehatan sangat membantu pemulihannya.',
-          source_title: 'IDAI — Mengenal Tanda Bahaya Bayi Baru Lahir',
-          source_url: 'https://www.idai.or.id/artikel/seputar-kesehatan-anak/mengenal-tanda-bahaya-pada-bayi-baru-lahir',
-          created_by: 'Admin Pendamping'
-        }
-      ],
-      healthDocs: [
-        {
-          doc_id: 'DOC-001',
-          family_id: 'FAM-2026',
-          jenis_catatan: 'Foto USG',
-          tanggal: getPastDateISO(35),
-          judul: 'USG Pertumbuhan Minggu ke-21',
-          ringkasan_medis: 'Perkiraan berat si kecil 410 gram, detak jantung 148 bpm teratur, posisi plasenta baik, air ketuban cukup.',
-          file_name: 'usg_FAM-2026_1730184400.png',
-          image_data: createSampleSVGDataURL('USG 21 MINGGU • DJJ 148 BPM', 'Perkiraan Berat: 410g • Berkembang Sehat'),
-          uploaded_by: 'Ayah Dimas'
-        },
-        {
-          doc_id: 'DOC-002',
-          family_id: 'FAM-2026',
-          jenis_catatan: 'Buku KIA / Lab',
-          tanggal: getPastDateISO(14),
-          judul: 'Catatan Kontrol Kehamilan & Cek Hb',
-          ringkasan_medis: 'Tekanan darah Bunda 110/70 mmHg, Hb 12.1 g/dL (Baik), pertambahan berat badan selaras dengan usia kehamilan.',
-          file_name: 'kia_FAM-2026_1731394000.png',
-          image_data: createSampleSVGDataURL('BUKU KIA • KONTROL RUTIN', 'TD: 110/70 mmHg • Hb: 12.1 g/dL'),
-          uploaded_by: 'Bunda Nadia'
-        }
-      ],
-      logs: [
-        { log_id: 'LOG-01', timestamp: 'Hari ini, 09:15', user: 'Bunda Nadia', action: 'CHECKLIST_UPDATE', detail: 'Menyelesaikan agenda: USG detail perkembangan organ si kecil', status: 'SUCCESS' },
-        { log_id: 'LOG-02', timestamp: 'Hari ini, 08:40', user: 'Ayah Dimas', action: 'UPLOAD_DRIVE', detail: 'Menyimpan foto kenangan USG 21 Minggu (usg_FAM-2026_1730184400.png)', status: 'SUCCESS' },
-        { log_id: 'LOG-03', timestamp: 'Kemarin, 19:22', user: 'Admin Pendamping', action: 'DOS_DONTS_SOURCE', detail: 'Memperbarui referensi panduan perawatan Newborn dari IDAI & Kemenkes RI', status: 'SUCCESS' }
-      ]
-    };
+    // Data awal kini dikelola server (Google Sheets) — lihat Code.gs
 
     function createSampleSVGDataURL(title, subtitle) {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
@@ -928,23 +794,12 @@
     }
 
     function loadState() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed.users)) {
-            parsed.users = parsed.users.map(ensureUserProfileDefaults);
-          }
-          return parsed;
-        }
-      } catch (e) {}
-      return JSON.parse(JSON.stringify(DEFAULT_STATE));
+      // Data hidup di server. State lokal hanya cache selama sesi berjalan.
+      return emptyState();
     }
 
     function saveState() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-      } catch (e) {}
+      /* tidak dipakai lagi: setiap perubahan langsung disimpan ke server lewat api() */
     }
 
     let appState = loadState();
@@ -978,6 +833,482 @@
     function toggleSidebarCollapse() {
       uiState.sidebarCollapsed = !uiState.sidebarCollapsed;
       renderApp();
+    }
+
+    // =========================================================================
+    // 1B. API LAYER — menggantikan localStorage dengan backend Google Apps Script
+    //     Semua data keluarga tersimpan di server (Google Sheets + Drive).
+    //     Di browser hanya ada: token sesi, preferensi tema, dan cache sementara.
+    // =========================================================================
+    const BP_CONFIG = {
+      // MODE A (hosting terpisah): tempel URL Web App Apps Script (berakhiran /exec) hasil Deploy.
+      //   Alternatif tanpa mengedit file ini: definisikan window.BABY_PLANNER_API_URL sebelum skrip ini.
+      // MODE B (file ini dipakai sebagai index.html di dalam Apps Script): BIARKAN apa adanya.
+      //   Terdeteksi otomatis lewat google.script.run, tidak butuh URL maupun CORS.
+      API_URL: window.BABY_PLANNER_API_URL || 'https://script.google.com/macros/s/AKfycbzHAX-3R8TvNhR6MCu-iVZZaqHwI5Mpg8U2rzHfeeDCDfqnwobgcqkpz4HX5QLnvEUlqQ/exec',
+      TOKEN_KEY: 'baby_planner_session_v1',
+      // true  = tampilkan tombol "Akun Simulasi" di layar masuk (hanya untuk uji coba dengan data demo)
+      SHOW_DEMO_ACCOUNTS: false,
+      REQUEST_TIMEOUT_MS: 60000,
+      LOADING_DELAY_MS: 350
+    };
+
+    const LOADING_SAVE = { title: 'Menyimpan...', subtitle: 'Sebentar ya, sedang merapikan catatan keluarga' };
+
+    // True bila halaman ini disajikan dari dalam Apps Script (HtmlService) sehingga google.script.run tersedia
+    function hasGoogleRun() {
+      return typeof google !== 'undefined' && !!google && !!google.script && !!google.script.run &&
+        typeof google.script.run.withSuccessHandler === 'function';
+    }
+
+    function isApiConfigured() {
+      if (hasGoogleRun()) return true;
+      const url = String(BP_CONFIG.API_URL || '');
+      return /^https:\/\//i.test(url) && url.indexOf('PASTE_') === -1;
+    }
+
+    // ---- Token sesi -----------------------------------------------------------
+    let _memToken = '';
+    function getToken() {
+      try { return localStorage.getItem(BP_CONFIG.TOKEN_KEY) || _memToken; } catch (e) { return _memToken; }
+    }
+    function setToken(token) {
+      _memToken = token || '';
+      try { localStorage.setItem(BP_CONFIG.TOKEN_KEY, _memToken); } catch (e) {}
+    }
+    function clearToken() {
+      _memToken = '';
+      try { localStorage.removeItem(BP_CONFIG.TOKEN_KEY); } catch (e) {}
+    }
+
+    // ---- Error & status koneksi -----------------------------------------------
+    class ApiClientError extends Error {
+      constructor(code, message) {
+        super(message);
+        this.name = 'ApiClientError';
+        this.code = code;
+      }
+    }
+
+    function apiErrorMessage(err) {
+      if (!err) return 'Terjadi kendala, coba lagi ya.';
+      if (err.code === 'NETWORK') return 'Koneksi ke server terputus. Periksa internet Anda lalu coba lagi ya.';
+      if (err.code === 'TIMEOUT') return 'Server terlalu lama merespons. Silakan coba lagi sebentar lagi ya.';
+      return err.message || 'Terjadi kendala, coba lagi ya.';
+    }
+
+    function setConnState(state) {
+      const map = {
+        online: ['var(--brand-primary)', 'RUANG KELUARGA ONLINE'],
+        busy: ['#e0a24a', 'MENYINKRONKAN…'],
+        offline: ['#d9697f', 'TIDAK TERSAMBUNG']
+      };
+      const m = map[state] || map.online;
+      const dot = document.getElementById('conn-dot');
+      const label = document.getElementById('conn-label');
+      if (dot) dot.style.backgroundColor = m[0];
+      if (label) label.textContent = m[1];
+    }
+
+    // Aksi baca / tanpa efek log: tidak memicu penyegaran log Admin
+    const READ_ACTIONS = new Set([
+      'ping', 'bootstrap', 'auth.me', 'auth.logout', 'family.get', 'members.list', 'member.get',
+      'checklist.list', 'schedule.list', 'dosdonts.list', 'doc.list', 'doc.image', 'admin.overview', 'log.list'
+    ]);
+
+    let _loadingDepth = 0;
+
+    /** Kirim string JSON ke apiCall() di Code.gs lewat google.script.run; hasilnya string JSON. */
+    function callViaAppsScript(body) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new ApiClientError('TIMEOUT', 'Server terlalu lama merespons.')), BP_CONFIG.REQUEST_TIMEOUT_MS);
+        google.script.run
+          .withSuccessHandler(result => { clearTimeout(timer); resolve(result); })
+          .withFailureHandler(err => {
+            clearTimeout(timer);
+            reject(new ApiClientError('NETWORK', (err && err.message) || 'Gagal terhubung ke server.'));
+          })
+          .apiCall(body);
+      });
+    }
+
+    /**
+     * Panggil backend. Mengembalikan `data` dari server atau melempar ApiClientError.
+     * opts.loading = {title, subtitle}  -> overlay muncul hanya jika respons > LOADING_DELAY_MS
+     * opts.noAuth  = true               -> jangan kirim token (login / daftar)
+     */
+    async function api(action, payload = {}, opts = {}) {
+      if (!isApiConfigured()) {
+        throw new ApiClientError('NOT_CONFIGURED', 'Alamat server belum diatur. Isi BP_CONFIG.API_URL dengan URL Web App Apps Script.');
+      }
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), BP_CONFIG.REQUEST_TIMEOUT_MS);
+      let loadingTimer = null;
+      let loadingShown = false;
+      if (opts.loading) {
+        loadingTimer = setTimeout(() => {
+          loadingShown = true;
+          _loadingDepth++;
+          showLoading(opts.loading.title, opts.loading.subtitle);
+        }, BP_CONFIG.LOADING_DELAY_MS);
+      }
+      setConnState('busy');
+      try {
+        const body = JSON.stringify({ action, token: opts.noAuth ? '' : getToken(), payload });
+        let json;
+        if (hasGoogleRun()) {
+          // MODE B: lewat google.script.run -> fungsi apiCall() di Code.gs
+          let raw;
+          try {
+            raw = await callViaAppsScript(body);
+          } catch (e) {
+            setConnState('offline');
+            throw e instanceof ApiClientError ? e : new ApiClientError('NETWORK', 'Gagal terhubung ke server.');
+          }
+          try {
+            json = JSON.parse(raw);
+          } catch (e) {
+            setConnState('offline');
+            throw new ApiClientError('BAD_RESPONSE', 'Respons server tidak dikenali. Coba muat ulang halaman.');
+          }
+        } else {
+          // MODE A: fetch ke URL Web App (doPost)
+          let res;
+          try {
+            res = await fetch(BP_CONFIG.API_URL, {
+              method: 'POST',
+              // text/plain = "simple request": tidak memicu preflight CORS yang tidak didukung Apps Script
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body,
+              signal: ctrl.signal
+            });
+          } catch (e) {
+            setConnState('offline');
+            throw new ApiClientError(e && e.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK', 'Gagal terhubung ke server.');
+          }
+          try {
+            json = await res.json();
+          } catch (e) {
+            setConnState('offline');
+            throw new ApiClientError('BAD_RESPONSE', 'Respons server tidak dikenali. Pastikan URL Web App benar dan akses Deploy diatur ke "Anyone".');
+          }
+        }
+        setConnState('online');
+        if (!json || json.ok !== true) {
+          const er = (json && json.error) || {};
+          if (er.code === 'UNAUTHORIZED') handleSessionExpired();
+          throw new ApiClientError(er.code || 'ERROR', er.message || 'Terjadi kendala di server.');
+        }
+        if (!READ_ACTIONS.has(action) && currentUser && currentUser.role === 'Admin') setTimeout(refreshAdminLogs, 0);
+        return json.data;
+      } finally {
+        clearTimeout(timer);
+        clearTimeout(loadingTimer);
+        if (loadingShown) {
+          _loadingDepth--;
+          if (_loadingDepth <= 0) { _loadingDepth = 0; hideLoading(); }
+        }
+      }
+    }
+
+    // ---- Pembantu eksekusi aksi ------------------------------------------------
+    const _inflight = new Set();
+
+    /** Cegah klik ganda: satu aksi dengan key yang sama hanya berjalan satu kali sekaligus. */
+    async function once(key, fn) {
+      if (_inflight.has(key)) return undefined;
+      _inflight.add(key);
+      try { return await fn(); } finally { _inflight.delete(key); }
+    }
+
+    /** once() + tampilkan pesan error ramah bila gagal. */
+    function runAction(key, fn) {
+      return once(key, async () => {
+        try {
+          return await fn();
+        } catch (err) {
+          showToast(apiErrorMessage(err), 'error');
+          return undefined;
+        }
+      });
+    }
+
+    // ---- State dari server -----------------------------------------------------
+    function emptyState() {
+      return { users: [], families: [], checklists: [], schedules: [], dosDonts: [], healthDocs: [], logs: [], stats: {}, adminCounts: null };
+    }
+
+    function resetLocalState() {
+      appState = emptyState();
+      resetDocImageCache();
+    }
+
+    function mapLog(l) {
+      return {
+        log_id: l.log_id,
+        user: l.user,
+        action: l.action,
+        detail: l.detail,
+        status: l.status,
+        timestamp: l.timestamp_label || l.timestamp
+      };
+    }
+
+    function sortHealthDocs() {
+      appState.healthDocs.sort((a, b) => {
+        if (a.tanggal !== b.tanggal) return String(b.tanggal).localeCompare(String(a.tanggal));
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
+    }
+
+    function applyBootstrap(data) {
+      const me = ensureUserProfileDefaults(data.user);
+      const members = (data.members || []).map(ensureUserProfileDefaults);
+      const idx = members.findIndex(u => u.user_id === me.user_id);
+      if (idx !== -1) members[idx] = me; else members.push(me);
+      appState = {
+        users: members,
+        families: [data.family],
+        checklists: data.checklists || [],
+        schedules: data.schedules || [],
+        dosDonts: data.dosDonts || [],
+        healthDocs: data.healthDocs || [],
+        logs: (data.logs || []).map(mapLog),
+        stats: data.stats || {},
+        adminCounts: null
+      };
+      currentUser = me;
+    }
+
+    function applyAdminOverview(ov) {
+      const own = appState.families[0];
+      const users = (ov.users || []).map(ensureUserProfileDefaults);
+      appState.users = users;
+      appState.families = (ov.families || []).map(f =>
+        own && f.family_id === own.family_id
+          ? { ...f, ...own }
+          : { invite_code: '', baby_name: '', baby_birth_date: '', ...f }
+      );
+      appState.logs = (ov.logs || []).map(mapLog);
+      appState.adminCounts = ov.counts || null;
+      currentUser = users.find(u => u.user_id === currentUser.user_id) || currentUser;
+    }
+
+    async function loadWorkspace() {
+      const data = await api('bootstrap');
+      applyBootstrap(data);
+      if (data.user.role === 'Admin') {
+        applyAdminOverview(await api('admin.overview'));
+      }
+    }
+
+    function upsertUser(serverUser) {
+      const existing = appState.users.find(x => x.user_id === serverUser.user_id) || {};
+      const merged = ensureUserProfileDefaults({ ...existing, ...serverUser });
+      const idx = appState.users.findIndex(x => x.user_id === merged.user_id);
+      if (idx !== -1) appState.users[idx] = merged; else appState.users.push(merged);
+      if (currentUser && currentUser.user_id === merged.user_id) currentUser = merged;
+      return merged;
+    }
+
+    let _refreshingLogs = false;
+    async function refreshAdminLogs() {
+      if (_refreshingLogs || !currentUser || currentUser.role !== 'Admin') return;
+      _refreshingLogs = true;
+      try {
+        const out = await api('log.list', { limit: 100 });
+        appState.logs = out.logs.map(mapLog);
+        if (currentUser && uiState.activeTab === 'admin') renderApp();
+      } catch (e) {
+        /* log tidak kritis */
+      } finally {
+        _refreshingLogs = false;
+      }
+    }
+
+    function handleSessionExpired() {
+      const wasLoggedIn = !!currentUser;
+      clearToken();
+      if (!wasLoggedIn) return;
+      currentUser = null;
+      resetLocalState();
+      closeModal();
+      hideLoading();
+      uiState.profileDropdownOpen = false;
+      uiState.mobileMenuOpen = false;
+      renderApp();
+      showToast('Sesi sudah berakhir. Silakan masuk kembali ya.', 'info');
+    }
+
+    /** Muat ulang semua data dari server (tombol "Muat Ulang Data" di banner atas). */
+    async function syncNow() {
+      if (!currentUser) {
+        showToast('Silakan masuk dulu ya, lalu data akan dimuat dari server.', 'info');
+        return;
+      }
+      await once('sync', async () => {
+        showLoading('Memuat Ulang Data...', 'Mengambil catatan terbaru dari server');
+        try {
+          await loadWorkspace();
+          renderApp();
+          showToast('Data terbaru berhasil dimuat dari server.', 'success');
+        } catch (err) {
+          showToast(apiErrorMessage(err), 'error');
+        } finally {
+          hideLoading();
+        }
+      });
+    }
+
+    /** Dipanggil sekali saat halaman dibuka: pulihkan sesi bila token masih berlaku. */
+    async function bootSession() {
+      window.__appBooted = true; // dibaca penjaga awal di <head>: skrip utama berhasil berjalan
+      if (!isApiConfigured()) {
+        renderApp();
+        showToast('Alamat server belum diatur. Isi BP_CONFIG.API_URL di bagian atas skrip dengan URL Web App Apps Script.', 'error');
+        setConnState('offline');
+        return;
+      }
+      if (!getToken()) {
+        renderApp();
+        return;
+      }
+      window.__bootBusy = true; // sedang menunggu server: jangan tampilkan panel error
+      showLoading('Membuka Ruang Keluarga...', 'Memulihkan sesi Anda');
+      try {
+        await loadWorkspace();
+        uiState.activeTab = currentUser.role === 'Admin' ? 'admin' : 'dashboard';
+      } catch (err) {
+        if (err.code !== 'UNAUTHORIZED') showToast(apiErrorMessage(err), 'error');
+        currentUser = null;
+        resetLocalState();
+      } finally {
+        window.__bootBusy = false;
+        hideLoading();
+        renderApp();
+      }
+    }
+
+    // ---- Gambar: kompres di browser sebelum diunggah ---------------------------
+    async function loadImageSource(file) {
+      if (typeof createImageBitmap === 'function') {
+        try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { /* jatuh ke <img> */ }
+      }
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode')); };
+        img.src = url;
+      });
+    }
+
+    /**
+     * Perkecil & ubah ke JPEG. Terus menurunkan kualitas/dimensi sampai panjang data-URL <= maxChars.
+     * Avatar dibatasi server 45.000 karakter; foto dokumen 5 MB.
+     */
+    async function compressImageFile(file, { maxDim, quality, maxChars }) {
+      const src = await loadImageSource(file);
+      const w0 = src.width;
+      const h0 = src.height;
+      let dim = maxDim;
+      let q = quality;
+      try {
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const scale = Math.min(1, dim / Math.max(w0, h0));
+          const w = Math.max(1, Math.round(w0 * scale));
+          const h = Math.max(1, Math.round(h0 * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const c2d = canvas.getContext('2d');
+          c2d.fillStyle = '#ffffff';
+          c2d.fillRect(0, 0, w, h);
+          c2d.drawImage(src, 0, 0, w, h);
+          const url = canvas.toDataURL('image/jpeg', q);
+          if (!maxChars || url.length <= maxChars) return url;
+          if (q > 0.5) q = Math.round((q - 0.1) * 100) / 100; else dim = Math.round(dim * 0.8);
+        }
+      } finally {
+        if (src && typeof src.close === 'function') src.close();
+      }
+      throw new Error('too-large');
+    }
+
+    // ---- Foto dokumen kesehatan: dimuat per dokumen & di-cache ------------------
+    let docImageCache = {};
+    const _docImgInflight = {};
+
+    function resetDocImageCache() {
+      docImageCache = {};
+    }
+
+    function docImgPlaceholder(doc) {
+      return createSampleSVGDataURL(
+        String(doc.jenis_catatan || 'DOKUMEN').toUpperCase(),
+        doc.has_image === false ? 'Belum ada foto' : 'Memuat foto…'
+      );
+    }
+
+    function docImgSrc(doc, size) {
+      return docImageCache[doc.doc_id + ':' + size] || docImgPlaceholder(doc);
+    }
+
+    function fetchDocImage(docId, size) {
+      const key = docId + ':' + size;
+      if (docImageCache[key]) return Promise.resolve(docImageCache[key]);
+      if (_docImgInflight[key]) return _docImgInflight[key];
+      _docImgInflight[key] = (async () => {
+        try {
+          const out = await api('doc.image', { doc_id: docId, size });
+          docImageCache[key] = out.data_url;
+          return out.data_url;
+        } finally {
+          delete _docImgInflight[key];
+        }
+      })();
+      return _docImgInflight[key];
+    }
+
+    /** Isi <img data-doc-img="DOC-ID" data-doc-size="thumb|full"> yang sudah ada di halaman. */
+    function hydrateDocImages() {
+      if (!currentUser) return;
+      document.querySelectorAll('img[data-doc-img]').forEach(img => {
+        const id = img.getAttribute('data-doc-img');
+        const size = img.getAttribute('data-doc-size') || 'thumb';
+        const doc = appState.healthDocs.find(d => d.doc_id === id);
+        if (!doc || !doc.has_image) return;
+        const cached = docImageCache[id + ':' + size];
+        if (cached) {
+          if (img.src !== cached) img.src = cached;
+          return;
+        }
+        fetchDocImage(id, size).then(url => { if (img.isConnected) img.src = url; }).catch(() => {});
+      });
+    }
+
+    function clearDocImageCacheFor(docId) {
+      Object.keys(docImageCache).forEach(k => { if (k.indexOf(docId + ':') === 0) delete docImageCache[k]; });
+    }
+
+    // ---- Kartu profil anggota: ambil ringkasan kontribusi dari server -----------
+    async function openMemberProfileModal(userId) {
+      const member = appState.users.find(u => u.user_id === userId);
+      if (!member) return;
+      const crossFamily = currentUser && member.family_id !== currentUser.family_id;
+      if (crossFamily || !appState.stats[userId]) {
+        try {
+          const out = await api('member.get', { user_id: userId }, {
+            loading: { title: 'Membuka Kartu Profil...', subtitle: 'Mengambil ringkasan kontribusi' }
+          });
+          appState.stats[userId] = out.stats;
+          upsertUser(out.member);
+        } catch (err) {
+          showToast(apiErrorMessage(err), 'error');
+          return;
+        }
+      }
+      _renderMemberProfileModal(userId);
     }
 
     // =========================================================================
@@ -1089,6 +1420,7 @@
       root.classList.remove('hidden');
       root.classList.add('flex');
       lucide.createIcons();
+      hydrateDocImages();
     }
 
     function closeModal() {
@@ -1137,46 +1469,11 @@
       }
     });
 
-    function addAuditLog(action, detail) {
-      if (!appState || !Array.isArray(appState.logs)) return;
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, '0');
-      const mm = String(now.getMinutes()).padStart(2, '0');
-      appState.logs.unshift({
-        log_id: 'LOG-' + Date.now().toString().slice(-5),
-        timestamp: `Hari ini, ${hh}:${mm}`,
-        user: currentUser ? currentUser.nama_lengkap : 'Sistem',
-        action,
-        detail,
-        status: 'SUCCESS'
-      });
-      if (appState.logs.length > 40) {
-        appState.logs = appState.logs.slice(0, 40);
-      }
-      saveState();
+    function addAuditLog() {
+      /* log aktivitas kini dicatat oleh server (sheet Logs) */
     }
 
-    function resetDemoData() {
-      openConfirmModal({
-        title: 'Atur Ulang Data Simulasi?',
-        message: 'Seluruh perubahan checklist, kalendar, jadwal bayi, dan galeri USG akan dikembalikan ke contoh awal.',
-        confirmLabel: 'Ya, Atur Ulang',
-        gentleDanger: true,
-        onConfirm: () => {
-          try {
-            localStorage.removeItem(STORAGE_KEY);
-          } catch (e) {}
-          appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
-          if (currentUser) {
-            const refreshed = appState.users.find(u => u.email === currentUser.email) || appState.users[0];
-            currentUser = ensureUserProfileDefaults(refreshed);
-          }
-          closeModal();
-          showToast('Data simulasi berhasil dikembalikan ke pengaturan awal.', 'info');
-          renderApp();
-        }
-      });
-    }
+
 
     // =========================================================================
     // 3. AUTHENTICATION HANDLERS (LOGIN, REGISTER, DEMO FILL, LOGOUT)
@@ -1189,42 +1486,47 @@
       showToast(`Akun simulasi ${email} siap — silakan klik Masuk ke Ruang Keluarga.`, 'info');
     }
 
-    function handleLogin(e) {
+    async function handleLogin(e) {
       e.preventDefault();
       const emailInput = document.getElementById('login-email');
       const passInput = document.getElementById('login-password');
       const email = (emailInput ? emailInput.value : '').trim().toLowerCase();
       const password = passInput ? passInput.value : '';
 
-      const matched = appState.users.find(
-        u => u.email.toLowerCase() === email && u.password === password
-      );
-
-      if (!matched) {
-        showToast('Email atau kata sandi belum cocok. Coba periksa kembali atau gunakan tombol Akun Simulasi.', 'error');
+      if (!email || !password) {
+        showToast('Mohon isi email dan kata sandi ya.', 'error');
         return;
       }
 
-      showLoading('Membuka Ruang Keluarga...', 'Menyiapkan catatan dan jadwal si kecil');
-      setTimeout(() => {
-        currentUser = ensureUserProfileDefaults(matched);
-        uiState.activeTab = currentUser.role === 'Admin' ? 'admin' : 'dashboard';
-        uiState.profileDropdownOpen = false;
-        uiState.mobileMenuOpen = false;
-        addAuditLog('LOGIN', `${currentUser.nama_lengkap} masuk ke ruang ${currentUser.family_id}`);
-        hideLoading();
-        showToast(`Selamat datang kembali, ${currentUser.nama_lengkap}!`, 'success');
-        renderApp();
-      }, 320);
+      await once('login', async () => {
+        showLoading('Membuka Ruang Keluarga...', 'Menyiapkan catatan dan jadwal si kecil');
+        try {
+          const out = await api('auth.login', { email, password }, { noAuth: true });
+          setToken(out.token);
+          resetDocImageCache();
+          await loadWorkspace();
+          uiState.activeTab = currentUser.role === 'Admin' ? 'admin' : 'dashboard';
+          uiState.profileDropdownOpen = false;
+          uiState.mobileMenuOpen = false;
+          showToast(`Selamat datang kembali, ${currentUser.nama_lengkap}!`, 'success');
+          renderApp();
+        } catch (err) {
+          clearToken();
+          currentUser = null;
+          showToast(apiErrorMessage(err), 'error');
+        } finally {
+          hideLoading();
+        }
+      });
     }
 
-    function handleRegister(e) {
+    async function handleRegister(e) {
       e.preventDefault();
       const nama = document.getElementById('reg-nama').value.trim();
       const familyRole = document.getElementById('reg-family-role').value;
       const email = document.getElementById('reg-email').value.trim().toLowerCase();
       const password = document.getElementById('reg-password').value;
-      const hpl = document.getElementById('reg-hpl').value || getFutureDateISO(140);
+      const hpl = document.getElementById('reg-hpl').value;
       const inviteCodeRaw = (document.getElementById('reg-invite-code').value || '').trim().toUpperCase();
 
       if (!nama || !email || password.length < 6) {
@@ -1232,86 +1534,34 @@
         return;
       }
 
-      if (appState.users.some(u => u.email.toLowerCase() === email)) {
-        showToast('Email ini sudah terdaftar. Silakan masuk melalui tab Masuk Akun.', 'error');
-        return;
-      }
-
-      let targetFamily = null;
-      if (inviteCodeRaw) {
-        targetFamily = appState.families.find(f => f.invite_code.toUpperCase() === inviteCodeRaw);
-        if (!targetFamily) {
-          showToast(`Kode keluarga "${inviteCodeRaw}" tidak ditemukan. Kosongkan jika ingin membuat ruang baru.`, 'error');
-          return;
+      await once('register', async () => {
+        showLoading('Menyiapkan Ruang Keluarga...', 'Merangkai kalendar & panduan awal untuk Anda');
+        try {
+          const payload = { nama_lengkap: nama, family_role: familyRole, email, password };
+          if (hpl) payload.hpl_date = hpl;
+          if (inviteCodeRaw) payload.invite_code = inviteCodeRaw;
+          const out = await api('auth.register', payload, { noAuth: true });
+          setToken(out.token);
+          resetDocImageCache();
+          await loadWorkspace();
+          uiState.activeTab = 'dashboard';
+          uiState.profileDropdownOpen = false;
+          uiState.mobileMenuOpen = false;
+          showToast(
+            out.created_family
+              ? `Ruang keluarga baru untuk ${nama} siap digunakan!`
+              : `Berhasil terhubung ke ${out.family.nama_keluarga}!`,
+            'success'
+          );
+          renderApp();
+        } catch (err) {
+          clearToken();
+          currentUser = null;
+          showToast(apiErrorMessage(err), 'error');
+        } finally {
+          hideLoading();
         }
-      }
-
-      showLoading('Menyiapkan Ruang Keluarga...', 'Merangkai kalendar & panduan awal untuk Anda');
-      setTimeout(() => {
-        let familyId;
-        if (targetFamily) {
-          familyId = targetFamily.family_id;
-        } else {
-          familyId = 'FAM-' + Date.now().toString().slice(-5);
-          const newInviteCode = 'KEL-' + Math.floor(1000 + Math.random() * 9000);
-          appState.families.push({
-            family_id: familyId,
-            invite_code: newInviteCode,
-            nama_keluarga: `Keluarga ${nama}`,
-            hpl_date: hpl,
-            baby_birth_date: '',
-            baby_name: 'Calon Buah Hati'
-          });
-
-          // Clone starter checklist & schedules for the newly created family
-          const starterChecks = DEFAULT_STATE.checklists
-            .filter(c => c.family_id === 'FAM-2026')
-            .map((c, idx) => ({
-              ...JSON.parse(JSON.stringify(c)),
-              item_id: `CHK-${Date.now()}-${idx}`,
-              family_id: familyId,
-              is_completed: false,
-              updated_by: familyRole
-            }));
-          appState.checklists.push(...starterChecks);
-
-          const starterSchedules = DEFAULT_STATE.schedules
-            .filter(s => s.family_id === 'FAM-2026')
-            .map((s, idx) => ({
-              ...JSON.parse(JSON.stringify(s)),
-              schedule_id: `SCH-${Date.now()}-${idx}`,
-              family_id: familyId
-            }));
-          appState.schedules.push(...starterSchedules);
-        }
-
-        const newUser = ensureUserProfileDefaults({
-          user_id: 'USR-' + Date.now().toString().slice(-5),
-          family_id: familyId,
-          nama_lengkap: nama,
-          email,
-          password,
-          role: 'User',
-          family_role: familyRole,
-          status_akun: 'Aktif',
-          avatar_color: familyRole === 'Bunda' ? 'lavender' : 'peach',
-          joined_at: toISODate(new Date())
-        });
-
-        appState.users.push(newUser);
-        currentUser = newUser;
-        uiState.activeTab = 'dashboard';
-        saveState();
-        addAuditLog('REGISTER', `${nama} bergabung sebagai ${familyRole} (${familyId})`);
-        hideLoading();
-        showToast(
-          targetFamily
-            ? `Berhasil terhubung ke ${targetFamily.nama_keluarga}!`
-            : `Ruang keluarga baru untuk ${nama} siap digunakan!`,
-          'success'
-        );
-        renderApp();
-      }, 420);
+      });
     }
 
     function requestLogout() {
@@ -1320,12 +1570,14 @@
         message: 'Semua catatan yang sudah tersimpan tetap aman dan dapat dibuka kembali kapan saja.',
         confirmLabel: 'Ya, Keluar',
         gentleDanger: false,
-        onConfirm: () => {
-          addAuditLog('LOGOUT', `${currentUser ? currentUser.nama_lengkap : 'Pengguna'} keluar dari sesi`);
+        onConfirm: async () => {
+          closeModal();
+          try { await api('auth.logout', {}); } catch (e) { /* tetap keluar di sisi browser */ }
+          clearToken();
           currentUser = null;
+          resetLocalState();
           uiState.profileDropdownOpen = false;
           uiState.mobileMenuOpen = false;
-          closeModal();
           showToast('Sampai jumpa lagi! Istirahat yang cukup ya.', 'info');
           renderApp();
         }
@@ -1436,46 +1688,57 @@
       `);
     }
 
-    function saveFamilySettingsForm(e) {
+    async function saveFamilySettingsForm(e) {
       e.preventDefault();
       const fam = getCurrentFamily();
       const nama = document.getElementById('fam-nama').value.trim();
       const babyName = document.getElementById('fam-baby-name').value.trim();
       const hpl = document.getElementById('fam-hpl').value;
 
-      const idx = appState.families.findIndex(f => f.family_id === fam.family_id);
-      if (idx !== -1) {
-        appState.families[idx] = {
-          ...appState.families[idx],
-          nama_keluarga: nama || fam.nama_keluarga,
-          baby_name: babyName || 'Calon Buah Hati',
+      await runAction('family-save', async () => {
+        const out = await api('family.update', {
+          nama_keluarga: nama,
+          baby_name: babyName,
           hpl_date: hpl || fam.hpl_date
-        };
-      }
-      saveState();
-      addAuditLog('FAMILY_UPDATE', `Memperbarui pengaturan keluarga & HPL (${formatDateID(hpl)})`);
-      closeModal();
-      showToast('Pengaturan ruang keluarga & HPL berhasil disimpan!', 'success');
-      renderApp();
+        }, { loading: LOADING_SAVE });
+        const idx = appState.families.findIndex(f => f.family_id === out.family.family_id);
+        if (idx !== -1) appState.families[idx] = { ...appState.families[idx], ...out.family };
+        else appState.families.push(out.family);
+        closeModal();
+        showToast('Pengaturan ruang keluarga & HPL berhasil disimpan!', 'success');
+        renderApp();
+      });
     }
 
     // =========================================================================
     // 5. CHECKLIST & CALENDAR CRUD ACTIONS (EMPATHETIC FEEDBACK)
     // =========================================================================
-    function toggleChecklistItem(itemId) {
+    async function toggleChecklistItem(itemId) {
       const item = appState.checklists.find(c => c.item_id === itemId);
       if (!item) return;
-      item.is_completed = !item.is_completed;
-      item.updated_by = currentUser.family_role || currentUser.nama_lengkap;
-      saveState();
-      addAuditLog('CHECKLIST_TOGGLE', `${item.is_completed ? 'Selesai' : 'Belum selesai'}: ${item.judul_item}`);
-      showToast(
-        item.is_completed
-          ? `Satu langkah lagi selesai! Hebat, ${item.updated_by}.`
-          : 'Tidak apa-apa, item dikembalikan ke daftar rencana untuk dicicil nanti.',
-        item.is_completed ? 'success' : 'info'
-      );
-      renderApp();
+      await once('toggle:' + itemId, async () => {
+        const prev = { is_completed: item.is_completed, updated_by: item.updated_by };
+        const next = !item.is_completed;
+        // Optimistik: tampilan langsung berubah, dikembalikan bila server menolak
+        item.is_completed = next;
+        item.updated_by = currentUser.family_role || currentUser.nama_lengkap;
+        renderApp();
+        try {
+          const out = await api('checklist.toggle', { item_id: itemId, is_completed: next });
+          Object.assign(item, out.item);
+          showToast(
+            item.is_completed
+              ? `Satu langkah lagi selesai! Hebat, ${item.updated_by}.`
+              : 'Tidak apa-apa, item dikembalikan ke daftar rencana untuk dicicil nanti.',
+            item.is_completed ? 'success' : 'info'
+          );
+        } catch (err) {
+          item.is_completed = prev.is_completed;
+          item.updated_by = prev.updated_by;
+          renderApp();
+          showToast(apiErrorMessage(err), 'error');
+        }
+      });
     }
 
     function openChecklistFormModal({ defaultModul, defaultKategori = '', presetDueDate = '', editItemId = null }) {
@@ -1606,9 +1869,8 @@
       }
     }
 
-    function saveChecklistForm(e, modul, editItemId) {
+    async function saveChecklistForm(e, modul, editItemId) {
       e.preventDefault();
-      const fam = getCurrentFamily();
       const kategori = document.getElementById('chk-kategori').value;
       const sub_periode = document.getElementById('chk-subperiode').value.trim();
       const judul_item = document.getElementById('chk-judul').value.trim();
@@ -1619,77 +1881,36 @@
       const qtyEl = document.getElementById('chk-qty');
       const hargaEl = document.getElementById('chk-harga');
 
-      let resolvedModul = modul;
-      if (kategori === 'Hospital Bag') {
-        resolvedModul = 'hospital_bag';
-      } else if (modul === 'hospital_bag' && kategori !== 'Hospital Bag') {
-        resolvedModul = 'gear_list';
-      } else if (kategori === 'Persiapan MPASI (Usia 4–6 Bulan)') {
-        resolvedModul = 'mpasi_prep';
-      } else if (kategori === 'Kebutuhan Newborn (0–3 Bulan)') {
-        resolvedModul = 'newborn_0_3m';
-      }
+      // Penentuan modul akhir & pekan kehamilan dihitung ulang oleh server
+      const payload = { modul, kategori, sub_periode, judul_item, deskripsi, catatan };
+      if (dueDateEl && dueDateEl.value) payload.due_date = dueDateEl.value;
+      if (dueTimeEl && dueTimeEl.value) payload.due_time = dueTimeEl.value;
+      if (qtyEl) payload.qty = Math.max(1, parseInt(qtyEl.value, 10) || 1);
+      if (hargaEl) payload.estimasi_harga = Math.max(0, parseInt(hargaEl.value, 10) || 0);
 
-      const dueDate = dueDateEl ? dueDateEl.value : '';
-      const dueTime = dueTimeEl ? (dueTimeEl.value || '08:00') : '';
-      const weekInfo = dueDate ? getPregnancyWeekInfoForDate(dueDate, fam) : { week: 1 };
-      const qtyVal = qtyEl ? Math.max(1, parseInt(qtyEl.value, 10) || 1) : 1;
-      const hargaVal = hargaEl ? Math.max(0, parseInt(hargaEl.value, 10) || 0) : 0;
-      const actor = currentUser.family_role || currentUser.nama_lengkap;
-
-      if (editItemId) {
-        const idx = appState.checklists.findIndex(c => c.item_id === editItemId);
-        if (idx !== -1) {
-          appState.checklists[idx] = {
-            ...appState.checklists[idx],
-            modul: resolvedModul,
-            kategori,
-            sub_periode,
-            due_date: dueDate || appState.checklists[idx].due_date || '',
-            due_time: dueTime || appState.checklists[idx].due_time || '',
-            week_number: dueDate ? weekInfo.week : appState.checklists[idx].week_number,
-            judul_item,
-            deskripsi,
-            qty: qtyVal,
-            estimasi_harga: hargaVal,
-            catatan,
-            updated_by: actor
-          };
+      await runAction('chk-save', async () => {
+        let item;
+        if (editItemId) {
+          payload.item_id = editItemId;
+          item = (await api('checklist.update', payload, { loading: LOADING_SAVE })).item;
+          const idx = appState.checklists.findIndex(c => c.item_id === editItemId);
+          if (idx !== -1) appState.checklists[idx] = item; else appState.checklists.push(item);
+          showToast('Catatan berhasil diperbarui dengan rapi.', 'success');
+        } else {
+          item = (await api('checklist.create', payload, { loading: LOADING_SAVE })).item;
+          appState.checklists.push(item);
+          showToast('Rencana baru berhasil ditambahkan ke daftar keluarga.', 'success');
         }
-        addAuditLog('CHECKLIST_EDIT', `Memperbarui item: ${judul_item}`);
-        showToast('Catatan berhasil diperbarui dengan rapi.', 'success');
-      } else {
-        appState.checklists.unshift({
-          item_id: 'CHK-' + Date.now(),
-          family_id: currentUser.family_id,
-          modul: resolvedModul,
-          kategori,
-          sub_periode,
-          due_date: dueDate,
-          due_time: dueTime,
-          week_number: weekInfo.week,
-          judul_item,
-          deskripsi,
-          is_completed: false,
-          qty: qtyVal,
-          estimasi_harga: hargaVal,
-          catatan,
-          updated_by: actor
-        });
-        addAuditLog('CHECKLIST_ADD', `Menambahkan item: ${judul_item}`);
-        showToast('Rencana baru berhasil ditambahkan ke daftar keluarga.', 'success');
-      }
 
-      if (dueDate) {
-        uiState.selectedCalendarDate = dueDate;
-        const parsed = new Date(dueDate + 'T00:00:00');
-        uiState.calendarYear = parsed.getFullYear();
-        uiState.calendarMonth = parsed.getMonth();
-      }
-
-      saveState();
-      closeModal();
-      renderApp();
+        if (item.due_date) {
+          uiState.selectedCalendarDate = item.due_date;
+          const parsed = new Date(item.due_date + 'T00:00:00');
+          uiState.calendarYear = parsed.getFullYear();
+          uiState.calendarMonth = parsed.getMonth();
+        }
+        closeModal();
+        renderApp();
+      });
     }
 
     function deleteChecklistItem(itemId) {
@@ -1700,13 +1921,13 @@
         message: `Apakah Bunda/Ayah ingin menghapus "${item.judul_item}" dari daftar perencanaan ini?`,
         confirmLabel: 'Ya, Hapus',
         gentleDanger: true,
-        onConfirm: () => {
+        onConfirm: () => runAction('chk-del:' + itemId, async () => {
+          await api('checklist.delete', { item_id: itemId }, { loading: LOADING_SAVE });
           appState.checklists = appState.checklists.filter(c => c.item_id !== itemId);
-          saveState();
           closeModal();
           showToast('Item sudah dihapus dari daftar.', 'info');
           renderApp();
-        }
+        })
       });
     }
 
@@ -1799,7 +2020,7 @@
       `);
     }
 
-    function saveDosDontsItem(e, editId) {
+    async function saveDosDontsItem(e, editId) {
       e.preventDefault();
       if (!currentUser || currentUser.role !== 'Admin') return;
 
@@ -1810,49 +2031,23 @@
       const dont_text = document.getElementById('dd-dont').value.trim();
       const alasan = document.getElementById('dd-alasan').value.trim();
       const source_title = document.getElementById('dd-source-title').value.trim();
-      let source_url = document.getElementById('dd-source-url').value.trim();
+      const source_url = document.getElementById('dd-source-url').value.trim();
+      const payload = { kategori, topik, is_emergency, do_text, dont_text, alasan, source_title, source_url };
 
-      if (source_url && !/^https?:\/\//i.test(source_url)) {
-        source_url = 'https://' + source_url;
-      }
-
-      if (editId) {
-        const idx = appState.dosDonts.findIndex(d => d.id === editId);
-        if (idx !== -1) {
-          appState.dosDonts[idx] = {
-            ...appState.dosDonts[idx],
-            kategori,
-            topik,
-            is_emergency,
-            do_text,
-            dont_text,
-            alasan,
-            source_title,
-            source_url
-          };
+      await runAction('dd-save', async () => {
+        if (editId) {
+          const out = await api('dosdonts.update', { ...payload, id: editId }, { loading: LOADING_SAVE });
+          const idx = appState.dosDonts.findIndex(d => d.id === editId);
+          if (idx !== -1) appState.dosDonts[idx] = out.item; else appState.dosDonts.push(out.item);
+          showToast('Panduan perawatan berhasil diperbarui!', 'success');
+        } else {
+          const out = await api('dosdonts.create', payload, { loading: LOADING_SAVE });
+          appState.dosDonts.push(out.item);
+          showToast('Panduan baru beserta tautan sumber berhasil diterbitkan.', 'success');
         }
-        addAuditLog('ADMIN_EDIT_GUIDE', `Memperbarui panduan: ${topik}`);
-        showToast('Panduan perawatan berhasil diperbarui!', 'success');
-      } else {
-        appState.dosDonts.unshift({
-          id: 'DD-' + Date.now().toString().slice(-5),
-          kategori,
-          topik,
-          is_emergency,
-          do_text,
-          dont_text,
-          alasan,
-          source_title,
-          source_url,
-          created_by: currentUser.nama_lengkap
-        });
-        addAuditLog('ADMIN_CREATE_GUIDE', `Menerbitkan panduan baru: ${topik}`);
-        showToast('Panduan baru beserta tautan sumber berhasil diterbitkan.', 'success');
-      }
-
-      saveState();
-      closeModal();
-      renderApp();
+        closeModal();
+        renderApp();
+      });
     }
 
     function deleteDosDontsItem(id) {
@@ -1865,14 +2060,13 @@
         message: `Topik "${target.topik}" akan dikeluarkan dari katalog panduan keluarga.`,
         confirmLabel: 'Ya, Hapus',
         gentleDanger: true,
-        onConfirm: () => {
+        onConfirm: () => runAction('dd-del:' + id, async () => {
+          await api('dosdonts.delete', { id }, { loading: LOADING_SAVE });
           appState.dosDonts = appState.dosDonts.filter(d => d.id !== id);
-          saveState();
           closeModal();
-          addAuditLog('ADMIN_DELETE_GUIDE', `Menghapus panduan: ${target.topik}`);
           showToast('Panduan telah dihapus dari daftar.', 'info');
           renderApp();
-        }
+        })
       });
     }
 
@@ -1942,7 +2136,7 @@
       openScheduleFormModal(scheduleId);
     }
 
-    function saveScheduleForm(e, editScheduleId) {
+    async function saveScheduleForm(e, editScheduleId) {
       e.preventDefault();
       const rentang_usia = document.getElementById('sch-usia').value;
       const waktu_mulai = document.getElementById('sch-start').value;
@@ -1950,41 +2144,23 @@
       const kategori_aktivitas = document.getElementById('sch-kat').value;
       const aktivitas = document.getElementById('sch-aktivitas').value.trim();
       const catatan = document.getElementById('sch-catatan').value.trim();
+      const payload = { rentang_usia, waktu_mulai, waktu_selesai, kategori_aktivitas, aktivitas, catatan };
 
-      if (editScheduleId) {
-        const idx = appState.schedules.findIndex(s => s.schedule_id === editScheduleId);
-        if (idx !== -1) {
-          appState.schedules[idx] = {
-            ...appState.schedules[idx],
-            rentang_usia,
-            waktu_mulai,
-            waktu_selesai,
-            kategori_aktivitas,
-            aktivitas,
-            catatan
-          };
+      await runAction('sch-save', async () => {
+        if (editScheduleId) {
+          const out = await api('schedule.update', { ...payload, schedule_id: editScheduleId }, { loading: LOADING_SAVE });
+          const idx = appState.schedules.findIndex(s => s.schedule_id === editScheduleId);
+          if (idx !== -1) appState.schedules[idx] = out.item; else appState.schedules.push(out.item);
+          showToast('Ritme jadwal si kecil berhasil disesuaikan.', 'success');
+        } else {
+          const out = await api('schedule.create', payload, { loading: LOADING_SAVE });
+          appState.schedules.push(out.item);
+          showToast('Slot jadwal baru berhasil ditambahkan.', 'success');
         }
-        addAuditLog('SCHEDULE_EDIT', `Memperbarui jadwal bayi (${waktu_mulai}): ${aktivitas}`);
-        showToast('Ritme jadwal si kecil berhasil disesuaikan.', 'success');
-      } else {
-        appState.schedules.push({
-          schedule_id: 'SCH-' + Date.now(),
-          family_id: currentUser.family_id,
-          rentang_usia,
-          waktu_mulai,
-          waktu_selesai,
-          kategori_aktivitas,
-          aktivitas,
-          catatan
-        });
-        addAuditLog('SCHEDULE_ADD', `Menambah jadwal bayi (${waktu_mulai}): ${aktivitas}`);
-        showToast('Slot jadwal baru berhasil ditambahkan.', 'success');
-      }
-
-      uiState.scheduleAgeFilter = rentang_usia;
-      saveState();
-      closeModal();
-      renderApp();
+        uiState.scheduleAgeFilter = rentang_usia;
+        closeModal();
+        renderApp();
+      });
     }
 
     function deleteScheduleItem(scheduleId) {
@@ -1993,13 +2169,13 @@
         message: 'Slot waktu ini akan dihapus dari Time Table harian si kecil.',
         confirmLabel: 'Ya, Hapus',
         gentleDanger: true,
-        onConfirm: () => {
+        onConfirm: () => runAction('sch-del:' + scheduleId, async () => {
+          await api('schedule.delete', { schedule_id: scheduleId }, { loading: LOADING_SAVE });
           appState.schedules = appState.schedules.filter(s => s.schedule_id !== scheduleId);
-          saveState();
           closeModal();
           showToast('Slot jadwal telah dihapus.', 'info');
           renderApp();
-        }
+        })
       });
     }
 
@@ -2214,7 +2390,7 @@
       openDocFormModal(docId);
     }
 
-    function saveDocForm(e, editDocId) {
+    async function saveDocForm(e, editDocId) {
       e.preventDefault();
       const jenis = document.getElementById('doc-jenis').value;
       const tanggal = document.getElementById('doc-tanggal').value;
@@ -2223,69 +2399,49 @@
       const fileInput = document.getElementById('doc-file');
       const file = fileInput.files && fileInput.files[0];
 
-      showLoading(editDocId ? 'Menyimpan Perubahan...' : 'Menyimpan ke Galeri...', 'Merapikan foto & catatan kesehatan keluarga');
-
-      const finalizeDoc = (imageData, origName) => {
-        if (editDocId) {
-          const idx = appState.healthDocs.findIndex(d => d.doc_id === editDocId);
-          if (idx !== -1) {
-            const currentDoc = appState.healthDocs[idx];
-            const cleanExt = origName ? origName.split('.').pop().toLowerCase() : '';
-            const nextFileName = origName
-              ? `kia_${currentUser.family_id}_${Math.floor(Date.now() / 1000)}.${cleanExt}`
-              : currentDoc.file_name;
-
-            appState.healthDocs[idx] = {
-              ...currentDoc,
-              jenis_catatan: jenis,
-              tanggal,
-              judul,
-              ringkasan_medis: ringkasan,
-              file_name: nextFileName,
-              image_data: imageData || currentDoc.image_data
-            };
+      await runAction('doc-save', async () => {
+        showLoading(editDocId ? 'Menyimpan Perubahan...' : 'Menyimpan ke Galeri...', 'Merapikan foto & catatan kesehatan keluarga');
+        try {
+          const payload = { jenis_catatan: jenis, tanggal, judul, ringkasan_medis: ringkasan };
+          if (file) {
+            if (!file.type.startsWith('image/')) {
+              throw new ApiClientError('BAD_IMAGE', 'Yuk pilih file gambar yang sesuai (JPG, PNG, atau WebP).');
+            }
+            try {
+              // Foto ponsel bisa belasan MB: perkecil dulu agar cepat & muat batas server (5 MB)
+              payload.image_data = await compressImageFile(file, { maxDim: 1600, quality: 0.85, maxChars: 6000000 });
+            } catch (_) {
+              throw new ApiClientError('BAD_IMAGE', 'Maaf, foto belum terbaca dengan baik. Coba pilih file lain ya.');
+            }
           }
-          addAuditLog('DOC_EDIT', `Memperbarui catatan: ${judul}`);
-          showToast('Catatan & foto kesehatan berhasil diperbarui.', 'success');
-        } else {
-          const cleanExt = origName ? origName.split('.').pop().toLowerCase() : 'png';
-          const standardizedName = `kia_${currentUser.family_id}_${Math.floor(Date.now() / 1000)}.${cleanExt}`;
-          appState.healthDocs.unshift({
-            doc_id: 'DOC-' + Date.now(),
-            family_id: currentUser.family_id,
-            jenis_catatan: jenis,
-            tanggal,
-            judul,
-            ringkasan_medis: ringkasan,
-            file_name: standardizedName,
-            image_data: imageData,
-            uploaded_by: currentUser.nama_lengkap
-          });
-          addAuditLog('UPLOAD_DRIVE', `Menyimpan ${standardizedName} (${judul})`);
-          showToast('Foto & catatan berhasil disimpan ke galeri keluarga!', 'success');
-        }
 
-        saveState();
-        hideLoading();
-        closeModal();
-        renderApp();
-      };
-
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          setTimeout(() => finalizeDoc(ev.target.result, file.name), 450);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setTimeout(() => {
+          let out;
           if (editDocId) {
-            finalizeDoc(null, null);
+            payload.doc_id = editDocId;
+            out = await api('doc.update', payload);
           } else {
-            finalizeDoc(createSampleSVGDataURL(jenis.toUpperCase(), judul), 'dokumen_kia.png');
+            out = await api('doc.create', payload);
           }
-        }, 400);
-      }
+          const item = out.item;
+          clearDocImageCacheFor(item.doc_id);
+          if (payload.image_data) {
+            docImageCache[item.doc_id + ':full'] = payload.image_data;
+            docImageCache[item.doc_id + ':thumb'] = payload.image_data;
+          }
+          const idx = appState.healthDocs.findIndex(d => d.doc_id === item.doc_id);
+          if (idx !== -1) appState.healthDocs[idx] = item; else appState.healthDocs.unshift(item);
+          sortHealthDocs();
+
+          showToast(
+            editDocId ? 'Catatan & foto kesehatan berhasil diperbarui.' : 'Foto & catatan berhasil disimpan ke galeri keluarga!',
+            'success'
+          );
+          closeModal();
+          renderApp();
+        } finally {
+          hideLoading();
+        }
+      });
     }
 
     function previewDocModal(docId) {
@@ -2301,12 +2457,12 @@
             <button type="button" onclick="closeModal()" class="text-inkMuted hover:text-ink p-1.5 rounded-full hover:bg-subtle"><i data-lucide="x" class="w-5 h-5"></i></button>
           </div>
           <div class="rounded-2xl overflow-hidden border border-hairline bg-subtle">
-            <img src="${doc.image_data}" alt="${escapeHTML(doc.judul)}" class="w-full max-h-72 object-contain mx-auto" />
+            <img src="${docImgSrc(doc, 'full')}" data-doc-img="${escapeHTML(doc.doc_id)}" data-doc-size="full" alt="${escapeHTML(doc.judul)}" class="w-full max-h-72 object-contain mx-auto" />
           </div>
           <div class="bg-pastelLavender/50 border border-pastelLavender-border p-4 rounded-2xl space-y-1.5">
             <p class="text-xs font-bold text-ink">Catatan Kunjungan (${formatDateID(doc.tanggal)}):</p>
             <p class="text-sm text-inkSoft leading-relaxed">${escapeHTML(doc.ringkasan_medis)}</p>
-            <p class="text-[11px] font-mono text-inkMuted pt-1">Arsip: ${escapeHTML(doc.file_name)} • Disimpan oleh ${escapeHTML(doc.uploaded_by)}</p>
+            <p class="text-[11px] font-mono text-inkMuted pt-1">Arsip: ${escapeHTML(doc.file_name || 'tanpa foto')} • Disimpan oleh ${escapeHTML(doc.uploaded_by)}</p>
           </div>
           <div class="flex justify-end gap-2.5">
             <button type="button" onclick="openEditDocModal('${doc.doc_id}')" class="px-4 py-2.5 text-sm font-semibold border border-hairline hover:bg-subtle text-ink rounded-full inline-flex items-center gap-1.5">
@@ -2325,13 +2481,14 @@
         message: 'Foto dan catatan ini akan dihapus dari galeri kesehatan keluarga.',
         confirmLabel: 'Ya, Hapus',
         gentleDanger: true,
-        onConfirm: () => {
+        onConfirm: () => runAction('doc-del:' + docId, async () => {
+          await api('doc.delete', { doc_id: docId }, { loading: LOADING_SAVE });
           appState.healthDocs = appState.healthDocs.filter(d => d.doc_id !== docId);
-          saveState();
+          clearDocImageCacheFor(docId);
           closeModal();
           showToast('Dokumen telah dihapus dari galeri.', 'info');
           renderApp();
-        }
+        })
       });
     }
 
@@ -2402,6 +2559,24 @@
     }
 
     function computeUserContributionStats(user) {
+      const srv = (appState.stats && appState.stats[user.user_id]) || null;
+      const sameFamily = !!currentUser && user.family_id === currentUser.family_id;
+      const totalUsersCount = srv && typeof srv.totalUsersCount === 'number' ? srv.totalUsersCount : appState.users.length;
+      const totalFamiliesCount = srv && typeof srv.totalFamiliesCount === 'number' ? srv.totalFamiliesCount : appState.families.length;
+
+      // Anggota keluarga lain (hanya Admin yang bisa): data lokal tidak lengkap, pakai angka server
+      if (srv && !sameFamily) {
+        return {
+          completedByUser: srv.completedByUser,
+          uploadedDocsCount: srv.uploadedDocsCount,
+          familySchedulesCount: srv.familySchedulesCount,
+          userLogsCount: srv.userLogsCount,
+          adminGuidesCount: srv.adminGuidesCount,
+          totalUsersCount,
+          totalFamiliesCount
+        };
+      }
+
       const famChecks = appState.checklists.filter(c => c.family_id === user.family_id);
       const roleTag = (user.family_role || '').toLowerCase();
       const nameTag = (user.nama_lengkap || '').toLowerCase();
@@ -2412,105 +2587,76 @@
         return updater === roleTag || updater === nameTag || (roleTag && updater.includes(roleTag));
       }).length;
 
-      const uploadedDocsCount = appState.healthDocs.filter(
-        d => d.family_id === user.family_id && (d.uploaded_by || '').toLowerCase() === nameTag
+      const uploadedDocsCount = appState.healthDocs.filter(d =>
+        d.family_id === user.family_id &&
+        (d.uploaded_by_id ? d.uploaded_by_id === user.user_id : (d.uploaded_by || '').toLowerCase() === nameTag)
       ).length;
 
       const familySchedulesCount = appState.schedules.filter(s => s.family_id === user.family_id).length;
-
-      const userLogsCount = appState.logs.filter(
-        l => (l.user || '').toLowerCase() === nameTag
-      ).length;
 
       return {
         completedByUser,
         uploadedDocsCount,
         familySchedulesCount,
-        userLogsCount,
+        userLogsCount: srv ? srv.userLogsCount : 0,
         adminGuidesCount: appState.dosDonts.length,
-        totalUsersCount: appState.users.length,
-        totalFamiliesCount: appState.families.length
+        totalUsersCount,
+        totalFamiliesCount
       };
     }
 
-    function handleAvatarUpload(event) {
-      const file = event.target.files && event.target.files[0];
+    async function handleAvatarUpload(event) {
+      const input = event.target;
+      const file = input.files && input.files[0];
       if (!file) return;
 
       if (!file.type.startsWith('image/')) {
         showToast('Yuk pilih file gambar yang sesuai (JPG, PNG, atau WebP).', 'error');
+        input.value = '';
         return;
       }
 
-      showLoading('Memperbarui Foto...', 'Menyesuaikan bingkai profil Bunda/Ayah');
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 320;
-          let width = img.width;
-          let height = img.height;
-          if (width > height) {
-            if (width > maxDim) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            }
-          } else if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
+      await runAction('avatar', async () => {
+        showLoading('Memperbarui Foto...', 'Menyesuaikan bingkai profil Bunda/Ayah');
+        try {
+          let dataUrl;
+          try {
+            // Server membatasi avatar 45.000 karakter; kompresi menurunkan kualitas otomatis bila perlu
+            dataUrl = await compressImageFile(file, { maxDim: 320, quality: 0.85, maxChars: 42000 });
+          } catch (_) {
+            showToast('Maaf, foto belum terbaca dengan baik. Coba pilih file lain ya.', 'error');
+            return;
           }
-
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-          const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-          if (idx !== -1) {
-            appState.users[idx].avatar_url = compressedDataUrl;
-            currentUser = appState.users[idx];
-          }
-          saveState();
-          hideLoading();
-          addAuditLog('AVATAR_UPDATE', `${currentUser.nama_lengkap} memperbarui foto profil`);
+          const out = await api('profile.avatar.upload', { data_url: dataUrl });
+          upsertUser(out.user);
           showToast('Foto profil berhasil diperbarui!', 'success');
           renderApp();
-        };
-        img.onerror = () => {
+        } finally {
           hideLoading();
-          showToast('Maaf, foto belum terbaca dengan baik. Coba pilih file lain ya.', 'error');
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
+          input.value = '';
+        }
+      });
     }
 
-    function removeUserAvatar() {
-      const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-      if (idx !== -1) {
-        appState.users[idx].avatar_url = '';
-        currentUser = appState.users[idx];
-        saveState();
-        addAuditLog('AVATAR_REMOVE', `${currentUser.nama_lengkap} kembali ke avatar inisial`);
+    async function removeUserAvatar() {
+      await runAction('avatar-remove', async () => {
+        const out = await api('profile.avatar.remove', {}, { loading: LOADING_SAVE });
+        upsertUser(out.user);
         showToast('Foto profil dihapus, kembali ke avatar inisial pastel.', 'info');
         renderApp();
-      }
+      });
     }
 
-    function setUserAvatarColor(colorKey) {
-      const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-      if (idx !== -1) {
-        appState.users[idx].avatar_color = colorKey;
-        currentUser = appState.users[idx];
-        saveState();
+    async function setUserAvatarColor(colorKey) {
+      await runAction('avatar-color', async () => {
+        const out = await api('profile.avatar.color', { avatar_color: colorKey });
+        upsertUser(out.user);
         showToast('Nuansa warna avatar diperbarui.', 'success');
         renderApp();
-      }
+      });
     }
 
-    function saveUserProfileForm(e) {
+    async function saveUserProfileForm(e) {
       e.preventDefault();
       const nama = document.getElementById('prof-nama').value.trim();
       const noHp = document.getElementById('prof-nohp').value.trim();
@@ -2527,39 +2673,32 @@
         return;
       }
 
-      const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-      if (idx !== -1) {
-        appState.users[idx] = {
-          ...appState.users[idx],
-          nama_lengkap: nama,
-          family_role: famRoleEl ? famRoleEl.value : appState.users[idx].family_role,
-          no_hp: noHp,
-          tanggal_lahir: tglLahir,
-          golongan_darah: golDarah,
-          alergi: alergi || 'Tidak ada',
-          faskes_utama: faskes,
-          dokter_pj: dokter,
-          bio_catatan: bio
-        };
-        currentUser = appState.users[idx];
-      }
+      const payload = {
+        nama_lengkap: nama,
+        no_hp: noHp,
+        tanggal_lahir: tglLahir,
+        golongan_darah: golDarah,
+        alergi,
+        faskes_utama: faskes,
+        dokter_pj: dokter,
+        bio_catatan: bio
+      };
+      if (famRoleEl) payload.family_role = famRoleEl.value;
 
-      saveState();
-      addAuditLog('PROFILE_UPDATE', `${currentUser.nama_lengkap} memperbarui profil & informasi medis`);
-      showToast('Profil pribadi & informasi darurat keluarga berhasil disimpan!', 'success');
-      renderApp();
+      await runAction('profile-save', async () => {
+        const out = await api('profile.update', payload, { loading: LOADING_SAVE });
+        upsertUser(out.user);
+        showToast('Profil pribadi & informasi darurat keluarga berhasil disimpan!', 'success');
+        renderApp();
+      });
     }
 
-    function saveUserPasswordForm(e) {
+    async function saveUserPasswordForm(e) {
       e.preventDefault();
       const oldPass = document.getElementById('prof-pass-old').value;
       const newPass = document.getElementById('prof-pass-new').value;
       const confirmPass = document.getElementById('prof-pass-confirm').value;
 
-      if (oldPass !== currentUser.password) {
-        showToast('Kata sandi saat ini belum sesuai. Coba periksa kembali ya.', 'error');
-        return;
-      }
       if (newPass.length < 6) {
         showToast('Gunakan kata sandi baru minimal 6 karakter agar akun tetap aman.', 'error');
         return;
@@ -2569,15 +2708,15 @@
         return;
       }
 
-      const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-      if (idx !== -1) {
-        appState.users[idx].password = newPass;
-        currentUser = appState.users[idx];
-      }
-      saveState();
-      addAuditLog('PASSWORD_CHANGE', `${currentUser.nama_lengkap} memperbarui kata sandi`);
-      showToast('Kata sandi akun berhasil diperbarui!', 'success');
-      renderApp();
+      await runAction('password', async () => {
+        await api('profile.password', {
+          old_password: oldPass,
+          new_password: newPass,
+          confirm_password: confirmPass
+        }, { loading: { title: 'Memperbarui Kata Sandi...', subtitle: 'Mengamankan akun Anda' } });
+        showToast('Kata sandi akun berhasil diperbarui! Perangkat lain akan diminta masuk ulang.', 'success');
+        renderApp();
+      });
     }
 
     function copyTextToClipboard(text, successMsg = 'Teks berhasil disalin!') {
@@ -2641,49 +2780,44 @@
       }
     }
 
-    function saveUserEmailForm(e) {
+    async function saveUserEmailForm(e) {
       e.preventDefault();
       const newEmail = document.getElementById('prof-email-new').value.trim().toLowerCase();
+      const pwEl = document.getElementById('prof-email-password');
+      const currentPassword = pwEl ? pwEl.value : '';
       if (!newEmail || !newEmail.includes('@')) {
         showToast('Mohon masukkan alamat email yang valid ya.', 'error');
         return;
       }
-      const duplicate = appState.users.some(
-        u => u.user_id !== currentUser.user_id && u.email.toLowerCase() === newEmail
-      );
-      if (duplicate) {
-        showToast('Alamat email ini sudah digunakan akun lain.', 'error');
+      if (!currentPassword) {
+        showToast('Masukkan kata sandi saat ini untuk mengonfirmasi perubahan email ya.', 'error');
         return;
       }
 
-      const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-      if (idx !== -1) {
-        appState.users[idx].email = newEmail;
-        currentUser = appState.users[idx];
-      }
-      saveState();
-      addAuditLog('EMAIL_UPDATE', `${currentUser.nama_lengkap} memperbarui alamat email akun`);
-      showToast('Alamat email akun berhasil diperbarui!', 'success');
-      renderApp();
+      await runAction('email', async () => {
+        const out = await api('profile.email', { email: newEmail, current_password: currentPassword }, { loading: LOADING_SAVE });
+        upsertUser(out.user);
+        showToast('Alamat email akun berhasil diperbarui!', 'success');
+        renderApp();
+      });
     }
 
-    function saveUserSocialForm(e) {
+    async function saveUserSocialForm(e) {
       e.preventDefault();
       const ig = document.getElementById('prof-social-ig').value.trim();
       const tiktok = document.getElementById('prof-social-tiktok').value.trim();
       const visibility = document.getElementById('prof-social-visibility').value;
 
-      const idx = appState.users.findIndex(u => u.user_id === currentUser.user_id);
-      if (idx !== -1) {
-        appState.users[idx].social_instagram = ig;
-        appState.users[idx].social_tiktok = tiktok;
-        appState.users[idx].social_visibility = visibility;
-        currentUser = appState.users[idx];
-      }
-      saveState();
-      addAuditLog('SOCIAL_PROFILE_UPDATE', `${currentUser.nama_lengkap} memperbarui profil sosial`);
-      showToast('Pengaturan profil sosial berhasil disimpan!', 'success');
-      renderApp();
+      await runAction('social', async () => {
+        const out = await api('profile.social', {
+          social_instagram: ig,
+          social_tiktok: tiktok,
+          social_visibility: visibility
+        }, { loading: LOADING_SAVE });
+        upsertUser(out.user);
+        showToast('Pengaturan profil sosial berhasil disimpan!', 'success');
+        renderApp();
+      });
     }
 
     // Close Profile Dropdown when clicking anywhere outside the wrapper
@@ -2694,7 +2828,7 @@
       }
     });
 
-    function openMemberProfileModal(userId) {
+    function _renderMemberProfileModal(userId) {
       const member = appState.users.find(u => u.user_id === userId);
       if (!member) return;
       const stats = computeUserContributionStats(member);
@@ -2795,6 +2929,7 @@
       root.innerHTML = renderAuthenticatedWorkspace();
       lucide.createIcons();
       startHeroCarouselAutoplay();
+      hydrateDocImages();
     }
 
     function renderAuthScreen() {
@@ -2867,6 +3002,7 @@
                 </div>
               </div>
 
+              ${BP_CONFIG.SHOW_DEMO_ACCOUNTS ? `
               <div class="relative z-10 mt-8 pt-5 border-t border-hairline/80 space-y-2.5">
                 <p class="text-xs font-bold text-inkSoft">Masuk Cepat dengan Akun Simulasi:</p>
                 <div class="flex flex-wrap gap-2">
@@ -2881,6 +3017,7 @@
                   </button>
                 </div>
               </div>
+              ` : ''}
             </div>
 
             <!-- Right Form Panel -->
@@ -2900,23 +3037,25 @@
                 <form onsubmit="handleLogin(event)" class="space-y-4 mt-6">
                   <div>
                     <label class="block text-xs font-bold text-inkSoft mb-1.5">Alamat Email</label>
-                    <input type="email" id="login-email" value="bunda@babyplanner.id" required placeholder="nama@email.com" class="w-full px-4 py-3.5 text-base input-calm" />
+                    <input type="email" id="login-email" value="${BP_CONFIG.SHOW_DEMO_ACCOUNTS ? 'bunda@babyplanner.id' : ''}" autocomplete="username" required placeholder="nama@email.com" class="w-full px-4 py-3.5 text-base input-calm" />
                   </div>
                   <div>
                     <label class="block text-xs font-bold text-inkSoft mb-1.5">Kata Sandi</label>
-                    <input type="password" id="login-password" value="bunda123" required placeholder="••••••••" class="w-full px-4 py-3.5 text-base input-calm" />
+                    <input type="password" id="login-password" value="${BP_CONFIG.SHOW_DEMO_ACCOUNTS ? 'bunda123' : ''}" autocomplete="current-password" required placeholder="••••••••" class="w-full px-4 py-3.5 text-base input-calm" />
                   </div>
                   <button type="submit" class="w-full py-4 px-6 bg-brand hover:bg-brand-hover text-white text-base font-bold rounded-full btn-press flex items-center justify-center gap-2 mt-2">
                     <span>Masuk ke Ruang Keluarga</span>
                     <i data-lucide="arrow-right" class="w-5 h-5"></i>
                   </button>
                 </form>
+                ${BP_CONFIG.SHOW_DEMO_ACCOUNTS ? `
                 <div class="mt-6 p-4 rounded-2xl bg-subtle border border-hairline text-xs text-inkSoft space-y-1.5">
                   <p class="font-bold text-ink">Panduan Akun Simulasi:</p>
                   <p>• <span class="font-semibold">Bunda:</span> <code class="font-mono text-brand-text">bunda@babyplanner.id</code> • sandi <code class="font-mono">bunda123</code></p>
                   <p>• <span class="font-semibold">Ayah (Terhubung Keluarga):</span> <code class="font-mono text-peach-text">ayah@babyplanner.id</code> • sandi <code class="font-mono">ayah123</code></p>
                   <p>• <span class="font-semibold">Kurator Panduan (Admin):</span> <code class="font-mono text-skyText">admin@babyplanner.id</code> • sandi <code class="font-mono">admin123</code></p>
                 </div>
+                ` : ''}
               ` : `
                 <h2 class="text-2xl font-extrabold text-ink display-friendly">Mulai Ruang Keluarga Baru</h2>
                 <p class="text-sm text-inkSoft mt-1">Daftar sebagai Bunda atau Ayah, lalu hubungkan pasangan dengan Kode Keluarga.</p>
@@ -4252,7 +4391,7 @@
               ${docs.map(doc => `
                 <div class="card-surface overflow-hidden flex flex-col">
                   <div onclick="previewDocModal('${doc.doc_id}')" class="h-48 bg-subtle relative cursor-pointer group overflow-hidden">
-                    <img src="${doc.image_data}" alt="${escapeHTML(doc.judul)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    <img src="${docImgSrc(doc, 'thumb')}" data-doc-img="${escapeHTML(doc.doc_id)}" data-doc-size="thumb" alt="${escapeHTML(doc.judul)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
                     <span class="absolute top-3.5 left-3.5 text-xs font-bold bg-surface/90 text-brand-text px-3 py-1 rounded-full border border-hairline">
                       ${escapeHTML(doc.jenis_catatan)}
                     </span>
@@ -4352,6 +4491,10 @@
             <div>
               <label class="block text-xs font-bold text-inkSoft mb-1.5">Email Aktif Saat Ini</label>
               <input type="email" id="prof-email-new" value="${escapeHTML(currentUser.email)}" required class="w-full px-4 py-3 text-sm font-mono input-calm" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-inkSoft mb-1.5">Kata Sandi Saat Ini (konfirmasi perubahan)</label>
+              <input type="password" id="prof-email-password" required autocomplete="current-password" placeholder="••••••••" class="w-full px-4 py-3 text-sm input-calm" />
             </div>
             <div class="flex justify-end pt-1">
               <button type="submit" class="px-5 py-2.5 bg-brand hover:bg-brand-hover text-white text-xs font-bold rounded-full btn-press">
@@ -4768,7 +4911,7 @@
             </div>
             <div class="card-surface p-5">
               <p class="text-xs font-bold text-inkMuted">Total Catatan Rencana</p>
-              <p class="text-2xl font-extrabold font-mono text-ink mt-1">${appState.checklists.length} Baris</p>
+              <p class="text-2xl font-extrabold font-mono text-ink mt-1">${appState.adminCounts ? appState.adminCounts.checklists : appState.checklists.length} Baris</p>
             </div>
           </div>
 
@@ -4893,8 +5036,8 @@
       `;
     }
 
-    // Boot application
-    renderApp();
+    // Boot application: pulihkan sesi dari token, atau tampilkan layar masuk
+    bootSession();
   </script>
 </body>
 </html>
